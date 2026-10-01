@@ -1,0 +1,21 @@
+{
+  "title": "Serverless API",
+  "profile": "aws",
+  "direction": "RIGHT",
+  "groups": [
+    { "id": "cloud", "label": "AWS Cloud", "type": "AWS Cloud" }
+  ],
+  "nodes": [
+    { "id": "users", "label": "Users", "icon": "Users (generic)" },
+    { "id": "apigw", "label": "Amazon API Gateway", "icon": "Amazon API Gateway", "group": "cloud" },
+    { "id": "fn", "label": "AWS Lambda", "icon": "AWS Lambda", "group": "cloud" },
+    { "id": "ddb", "label": "Amazon DynamoDB", "icon": "Amazon DynamoDB", "group": "cloud" },
+    { "id": "cw", "label": "Amazon CloudWatch", "icon": "Amazon CloudWatch", "group": "cloud" }
+  ],
+  "edges": [
+    { "from": "users", "to": "apigw", "label": "HTTPS request", "step": 1 },
+    { "from": "apigw", "to": "fn", "label": "invoke", "step": 2 },
+    { "from": "fn", "to": "ddb", "label": "read / write items", "step": 3 },
+    { "from": "fn", "to": "cw", "label": "logs and metrics", "style": "dashed" }
+  ]
+}

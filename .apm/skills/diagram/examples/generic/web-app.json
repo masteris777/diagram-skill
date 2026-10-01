@@ -1,0 +1,37 @@
+{
+  "title": "Web shop: request flow",
+  "profile": "generic",
+  "direction": "RIGHT",
+  "groups": [
+    { "id": "edge",    "label": "Edge",              "type": "Purple dashed" },
+    { "id": "app",     "label": "Application",       "type": "Orange dashed" },
+    { "id": "data",    "label": "Data",              "type": "Blue dashed" }
+  ],
+  "nodes": [
+    { "id": "shopper", "label": "Shopper",           "icon": "users" },
+    { "id": "cdn",     "label": "CDN",               "icon": "globe",         "group": "edge" },
+    { "id": "waf",     "label": "Firewall",          "icon": "firewall",      "group": "edge" },
+    { "id": "lb",      "label": "Load balancer",     "icon": "load-balancer", "group": "app" },
+    { "id": "web",     "label": "Web front end",     "icon": "browser",       "group": "app" },
+    { "id": "orders",  "label": "Orders service",    "icon": "service",       "group": "app" },
+    { "id": "search",  "label": "Search service",    "icon": "service",       "group": "app" },
+    { "id": "db",      "label": "Orders database",   "icon": "database",      "group": "data" },
+    { "id": "cache",   "label": "Session cache",     "icon": "cache",         "group": "data" },
+    { "id": "files",   "label": "Product images",    "icon": "storage",       "group": "data" },
+    { "id": "queue",   "label": "Order events",      "icon": "queue",         "group": "app" },
+    { "id": "mail",    "label": "Email service",     "icon": "mail" }
+  ],
+  "edges": [
+    { "from": "shopper", "to": "cdn",    "label": "HTTPS",           "step": 1 },
+    { "from": "cdn",     "to": "waf",    "label": "filter",          "step": 2 },
+    { "from": "waf",     "to": "lb",     "label": "forward",         "step": 3 },
+    { "from": "lb",      "to": "web",    "label": "route",           "step": 4 },
+    { "from": "web",     "to": "orders", "label": "place order",     "step": 5 },
+    { "from": "web",     "to": "search", "label": "query",           "step": 5 },
+    { "from": "orders",  "to": "db",     "label": "write",           "step": 6 },
+    { "from": "web",     "to": "cache",  "label": "session",         "style": "dashed" },
+    { "from": "search",  "to": "files",  "label": "thumbnails",      "style": "dashed" },
+    { "from": "orders",  "to": "queue",  "label": "publish",         "step": 7 },
+    { "from": "queue",   "to": "mail",   "label": "confirmation",    "step": 8 }
+  ]
+}

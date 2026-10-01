@@ -1,0 +1,24 @@
+{
+  "title": "Synthetic AWS pack check",
+  "profile": "aws",
+  "direction": "RIGHT",
+  "groups": [
+    { "id": "cloud",  "label": "AWS Cloud",        "type": "AWS Cloud" },
+    { "id": "region", "label": "Region eu-west-1", "type": "Region",         "parent": "cloud" },
+    { "id": "vpc",    "label": "VPC 10.0.0.0/16",  "type": "VPC",            "parent": "region" },
+    { "id": "priv",   "label": "Private subnets",  "type": "Private subnet", "parent": "vpc" }
+  ],
+  "nodes": [
+    { "id": "users", "label": "Users",              "icon": "Users (generic)" },
+    { "id": "api",   "label": "Amazon API Gateway", "icon": "Amazon API Gateway", "group": "region" },
+    { "id": "fn",    "label": "AWS Lambda",         "icon": "AWS Lambda",         "group": "priv" },
+    { "id": "ddb",   "label": "Amazon DynamoDB",    "icon": "Amazon DynamoDB",    "group": "region" },
+    { "id": "cw",    "label": "Amazon CloudWatch",  "icon": "Amazon CloudWatch",  "group": "region" }
+  ],
+  "edges": [
+    { "from": "users", "to": "api", "label": "HTTPS",        "step": 1 },
+    { "from": "api",   "to": "fn",  "label": "invoke",       "step": 2 },
+    { "from": "fn",    "to": "ddb", "label": "read / write", "step": 3 },
+    { "from": "fn",    "to": "cw",  "label": "logs",         "style": "dashed" }
+  ]
+}

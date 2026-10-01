@@ -1,0 +1,40 @@
+{
+  "examples": {
+    "generic/web-app": {
+      "width": 2400,
+      "svg": "aab3b2108e4bedc9f62023cd6f07c82c2ed33c5eec9ff3f74589d978c7039de0",
+      "png": "f044ce7a8fdf354bbf0fbe1d76abbf4f702726b01e91af07e250f2eb10c04ddf"
+    },
+    "generic/platform": {
+      "width": 2400,
+      "svg": "5228adc30cffabacbc92fefea17323dd9c9ca22e908d70f43f0c155b767aa282",
+      "png": "89f561961ec9d3ae741ad201035fe48843dc7ba7ca93eac5aec9d30ee794f414"
+    },
+    "aws/tiny": {
+      "width": 2000,
+      "svg": "7215518eba21cbd3f776639e67ce52504b3aa7f616edcb900d8fe4371ea8f589",
+      "png": "73b3827290a3afcdc7e47a7df4453e19a17d44473bb759e1497a99a76b15fa93"
+    },
+    "aws/medium": {
+      "width": 2400,
+      "svg": "315a2cb5748ddc016a11329b848a12abfe5b5ec740b3fdbabf1531dca3d79342",
+      "png": "5ab564e5be769943cfe91393d73090050b0cbaf7b825b2e9d9d17cc142cf0de2"
+    },
+    "aws/large": {
+      "width": 4600,
+      "svg": "5fdf3f14265bb8a73988a177accdd758596266b3cd1a6b531caeb5ce5a501fa6",
+      "png": "6c70daf042882f5454ca1d48a986753b142138886a4dfe74fcc94a9d35ce6e0c"
+    },
+    "aws/event-driven": {
+      "width": 2400,
+      "svg": "b8c84622b92c6bc2cfe70344f8a34c825cd65e0878c0fc3b5805dac83efac099",
+      "png": "9af786c96fc409371743d1d644dd3d082e0d4e523424321d91aa1c41d9b60b3b"
+    }
+  },
+  "synthetic": {
+    "width": 2000,
+    "svg": "bcaea3b0cfe7b9a84b6914b355cc02eef991d4d3a2dbb467f1017108bd3f7190",
+    "png": "62f33101bb408418622def488663cbe053d5dd9e2dfb38a043b5959c8e2591d0"
+  },
+  "aws_store": "fee81b4173ecfc57e9bf2c7fc9ccf1240cf132ddcb82e18b802fe86e743f832b"
+}

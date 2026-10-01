@@ -1,0 +1,39 @@
+{
+  "title": "Platform overview",
+  "profile": "generic",
+  "direction": "RIGHT",
+  "groups": [
+    { "id": "clients",  "label": "Clients",         "type": "Group solid" },
+    { "id": "platform", "label": "Platform",        "type": "Teal dashed" },
+    { "id": "data",     "label": "Data stores",     "type": "Blue dashed" }
+  ],
+  "nodes": [
+    { "id": "web",      "label": "Web app",              "icon": "browser",  "group": "clients" },
+    { "id": "mobile",   "label": "Mobile app",           "icon": "mobile",   "group": "clients" },
+    { "id": "api",      "label": "API gateway",          "icon": "api",      "group": "platform" },
+    { "id": "auth",     "label": "Auth service",         "icon": "lock",     "group": "platform" },
+    { "id": "catalog",  "label": "Catalog service",      "icon": "service",  "group": "platform" },
+    { "id": "billing",  "label": "Billing service",      "icon": "service",  "group": "platform" },
+    { "id": "bus",      "label": "Event bus",            "icon": "topic",    "group": "platform" },
+    { "id": "notifier", "label": "Notification service", "icon": "service",  "group": "platform" },
+    { "id": "catalogdb", "label": "Catalog database",    "icon": "database", "group": "data" },
+    { "id": "billingdb", "label": "Billing database",    "icon": "database", "group": "data" },
+    { "id": "cache",    "label": "Cache",                "icon": "cache",    "group": "data" },
+    { "id": "payments", "label": "Payment provider",     "icon": "cloud" },
+    { "id": "mail",     "label": "Email provider",       "icon": "mail" }
+  ],
+  "edges": [
+    { "from": "web",      "to": "api",       "label": "HTTPS",       "step": 1 },
+    { "from": "mobile",   "to": "api",       "label": "HTTPS",       "step": 1 },
+    { "from": "api",      "to": "auth",      "label": "verify token", "step": 2 },
+    { "from": "api",      "to": "catalog",   "label": "browse",      "step": 3 },
+    { "from": "api",      "to": "billing",   "label": "checkout",    "step": 3 },
+    { "from": "catalog",  "to": "catalogdb", "label": "read",        "step": 4 },
+    { "from": "catalog",  "to": "cache",     "label": "cache",       "style": "dashed" },
+    { "from": "billing",  "to": "billingdb", "label": "write",       "step": 4 },
+    { "from": "billing",  "to": "payments",  "label": "charge",      "step": 5 },
+    { "from": "billing",  "to": "bus",       "label": "order paid",  "step": 6 },
+    { "from": "bus",      "to": "notifier",  "label": "event",       "step": 7 },
+    { "from": "notifier", "to": "mail",      "label": "send",        "step": 8 }
+  ]
+}

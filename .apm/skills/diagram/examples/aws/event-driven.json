@@ -1,0 +1,35 @@
+{
+  "title": "Event-driven order processing",
+  "profile": "aws",
+  "direction": "RIGHT",
+  "groups": [
+    { "id": "cloud",  "label": "AWS Cloud",        "type": "AWS Cloud" },
+    { "id": "region", "label": "Region eu-west-1", "type": "Region",         "parent": "cloud" },
+    { "id": "vpc",    "label": "VPC 10.0.0.0/16",  "type": "VPC",            "parent": "region" },
+    { "id": "priv",   "label": "Private subnets",  "type": "Private subnet", "parent": "vpc" }
+  ],
+  "nodes": [
+    { "id": "customer", "label": "Customer",              "icon": "Users (generic)" },
+    { "id": "apigw",    "label": "Amazon API Gateway",    "icon": "Amazon API Gateway",           "group": "region" },
+    { "id": "orders",   "label": "Orders API",            "icon": "AWS Lambda",                   "group": "priv" },
+    { "id": "db",       "label": "Aurora PostgreSQL",     "icon": "Amazon Aurora",                "group": "priv" },
+    { "id": "queue",    "label": "Order queue",           "icon": "Amazon Simple Queue Service",  "group": "region" },
+    { "id": "worker",   "label": "Fulfilment worker",     "icon": "AWS Lambda",                   "group": "region" },
+    { "id": "status",   "label": "Order status",          "icon": "Amazon DynamoDB",              "group": "region" },
+    { "id": "invoices", "label": "S3 bucket: invoices",   "icon": "Amazon S3 (bucket)",           "group": "region" },
+    { "id": "events",   "label": "Order events",          "icon": "Amazon Simple Notification Service", "group": "region" },
+    { "id": "cw",       "label": "Amazon CloudWatch",     "icon": "Amazon CloudWatch",            "group": "region" }
+  ],
+  "edges": [
+    { "from": "customer", "to": "apigw",    "label": "POST /orders",       "step": 1 },
+    { "from": "apigw",    "to": "orders",   "label": "invoke",             "step": 2 },
+    { "from": "orders",   "to": "db",       "label": "write order",        "step": 3 },
+    { "from": "orders",   "to": "queue",    "label": "enqueue",            "step": 4 },
+    { "from": "queue",    "to": "worker",   "label": "poll",               "step": 5 },
+    { "from": "worker",   "to": "status",   "label": "update status",      "step": 6 },
+    { "from": "worker",   "to": "invoices", "label": "store invoice",      "step": 6 },
+    { "from": "worker",   "to": "events",   "label": "publish",            "step": 7 },
+    { "from": "events",   "to": "customer", "label": "confirmation email", "step": 8, "style": "dashed", "back": true },
+    { "from": "worker",   "to": "cw",       "label": "logs",               "style": "dashed" }
+  ]
+}

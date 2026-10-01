@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.local.json
+/out/
+/tmp/
+apm_modules/
