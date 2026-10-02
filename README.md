@@ -19,6 +19,8 @@ apm install masteris777/diagram-skill#v0.1.0
 
 APM copies the skill to `.claude/skills/diagram/` (Claude Code) and `.agents/skills/diagram/` (Copilot, Cursor, Gemini and others), whichever targets your project uses. Without APM, copy `.apm/skills/diagram/` to the folder your agent reads skills from, or run the script directly. You need Node.js 18 or newer; that is all.
 
+While the repository is private, pm install uses the GitHub credentials already on the machine (it worked with gh auth login done).
+
 ```
 node .claude/skills/diagram/scripts/diagram.mjs --doctor      # is this machine ready?
 node .claude/skills/diagram/scripts/diagram.mjs spec.json out.png --svg --width 2400
