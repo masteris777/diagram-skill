@@ -9,6 +9,16 @@ An agent skill that draws architecture diagrams. Describe the system; the agent 
 - **Agent friendly.** `SKILL.md` teaches the loop: write the spec, `--check` (all problems at once, with "did you mean"), render, look at the picture, refine. Pictures take 0.5 to 1.5 s.
 - **Zero install, deterministic.** The three runtime components are vendored and verified against SHA-256 sums. No network at install or run time; the same spec gives the same bytes on Windows and Linux (Node 18 and 24 tested).
 
+## Requirements
+
+- **Node.js 18 or newer** on the PATH (tested with 18, 20, 22 and 24; `node --version` shows yours), with WebAssembly enabled, which is the default. That is all the skill needs to run: no `npm install`, no Python, browser, Graphviz, system fonts, network access or admin rights. elkjs, resvg-wasm and the font are inside the skill (about 6 MB).
+- **Windows or Linux.** Tested on Windows 11 and Debian. macOS should work (plain JavaScript and WebAssembly) but is untested.
+- **For `aws` pictures, your own copy of the AWS Architecture Icons**, imported once (see [the AWS icons](#the-aws-icons-bring-your-own)). The `generic` profile needs nothing.
+- **An agent that reads `SKILL.md` skills and can run shell commands.** It should also be able to view PNG files, so it can check and fix the picture; without that it still renders, but you review the result yourself. Developed and tested with Claude Code; other agents are untested.
+- **APM is optional.** It only installs the skill, and it needs git (and Python 3.10+ if you install APM itself with pip). Without APM, copy the folder.
+
+`node .claude/skills/diagram/scripts/diagram.mjs --doctor` checks the Node version, the vendored files (SHA-256), WebAssembly with font rendering, and each profile's icons.
+
 ## Install
 
 With [APM](https://github.com/microsoft/apm) (Agent Package Manager):
@@ -17,9 +27,9 @@ With [APM](https://github.com/microsoft/apm) (Agent Package Manager):
 apm install masteris777/diagram-skill#v0.1.0
 ```
 
-APM copies the skill to `.claude/skills/diagram/` (Claude Code) and `.agents/skills/diagram/` (Copilot, Cursor, Gemini and others), whichever targets your project uses. Without APM, copy `.apm/skills/diagram/` to the folder your agent reads skills from, or run the script directly. You need Node.js 18 or newer; that is all.
+APM copies the skill to `.claude/skills/diagram/` (Claude Code) and `.agents/skills/diagram/` (Copilot, Cursor, Gemini and others), whichever targets your project uses. Without APM, copy `.apm/skills/diagram/` to the folder your agent reads skills from, or run the script directly. APM installs with its own installer, Homebrew, WinGet, Scoop or `pip install apm-cli`; see its README.
 
-While the repository is private, pm install uses the GitHub credentials already on the machine (it worked with gh auth login done).
+A private copy of this repository installs the same way, with the GitHub credentials already on the machine (for example after `gh auth login`).
 
 ```
 node .claude/skills/diagram/scripts/diagram.mjs --doctor      # is this machine ready?
@@ -89,6 +99,11 @@ node test/run.mjs --aws-pack <zip|folder>           # also the AWS examples with
 node test/run.mjs --update [--aws-pack P]           # re-render the example pictures and golden hashes (look first)
 node tools/make-generic-icons.mjs && node tools/icon-sheet.mjs
 ```
+
+## Contributors
+
+- [masteris777](https://github.com/masteris777): author and maintainer.
+- [Claude](https://www.anthropic.com/claude) (Anthropic): co-developed the engine, tests and documentation with the author, working in Claude Code.
 
 ## Licence
 

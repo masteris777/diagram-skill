@@ -56,8 +56,10 @@ function compare(label, got, want) {
   const skillMd = fs.readFileSync(path.join(SKILL, 'SKILL.md'), 'utf8');
   check('SKILL.md has frontmatter with name "diagram" and a description', /^---\r?\nname: diagram\r?\ndescription: .{40,}/s.test(skillMd));
 
-  // APM refuses to install packages that contain invisible Unicode (zero-width, bidi controls, BOM, soft hyphen): keep every text file clean
-  const ranges = [[0x200b, 0x200f], [0x202a, 0x202e], [0x2060, 0x2064], [0x2066, 0x2069], [0xfeff, 0xfeff], [0xad, 0xad], [0x180e, 0x180e]];
+  // APM refuses to install packages that contain invisible Unicode (zero-width, bidi controls, BOM, soft hyphen): keep every text file clean.
+  // ASCII control characters are just as invisible (a stray BEL once ate the "a" of "apm"); only tab, LF and CR are allowed
+  const ranges = [[0x200b, 0x200f], [0x202a, 0x202e], [0x2060, 0x2064], [0x2066, 0x2069], [0xfeff, 0xfeff], [0xad, 0xad], [0x180e, 0x180e],
+    [0x00, 0x08], [0x0b, 0x0c], [0x0e, 0x1f], [0x7f, 0x7f]];
   const HIDDEN = new RegExp(`[${ranges.map(([a, b]) => String.fromCharCode(a) + (b > a ? `-${String.fromCharCode(b)}` : '')).join('')}]`);
   const TEXT = /\.(md|mjs|cjs|js|json|txt|yml|yaml|svg|gitignore|gitattributes)$|SHA256SUMS$/;
   const hits = [];
@@ -68,7 +70,7 @@ function compare(label, got, want) {
       if (e.isDirectory()) walk(p); else if (TEXT.test(e.name) && HIDDEN.test(fs.readFileSync(p, 'utf8'))) hits.push(path.relative(ROOT, p));
     }
   })(ROOT);
-  check('no hidden Unicode characters in any text file', !hits.length, hits.join('\n'));
+  check('no hidden Unicode or control characters in any text file', !hits.length, hits.join('\n'));
 }
 
 // ---------- 2. command line behaviour an agent relies on ----------
