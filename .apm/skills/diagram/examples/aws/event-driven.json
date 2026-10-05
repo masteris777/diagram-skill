@@ -18,7 +18,8 @@
     { "id": "status",   "label": "Order status",          "icon": "Amazon DynamoDB",              "group": "region" },
     { "id": "invoices", "label": "S3 bucket: invoices",   "icon": "Amazon S3 (bucket)",           "group": "region" },
     { "id": "events",   "label": "Order events",          "icon": "Amazon Simple Notification Service", "group": "region" },
-    { "id": "cw",       "label": "Amazon CloudWatch",     "icon": "Amazon CloudWatch",            "group": "region" }
+    { "id": "cw",       "label": "Amazon CloudWatch",     "icon": "Amazon CloudWatch",            "group": "region" },
+    { "id": "inbox",    "label": "Customer inbox",        "icon": "Email" }
   ],
   "edges": [
     { "from": "customer", "to": "apigw",    "label": "POST /orders",       "step": 1 },
@@ -29,7 +30,7 @@
     { "from": "worker",   "to": "status",   "label": "update status",      "step": 6 },
     { "from": "worker",   "to": "invoices", "label": "store invoice",      "step": 6 },
     { "from": "worker",   "to": "events",   "label": "publish",            "step": 7 },
-    { "from": "events",   "to": "customer", "label": "confirmation email", "step": 8, "style": "dashed", "back": true },
+    { "from": "events",   "to": "inbox",    "label": "confirmation email", "step": 8, "style": "dashed" },
     { "from": "worker",   "to": "cw",       "label": "logs",               "style": "dashed" }
   ]
 }

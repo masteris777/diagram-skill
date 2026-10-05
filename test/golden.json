@@ -2,39 +2,39 @@
   "examples": {
     "generic/web-app": {
       "width": 2400,
-      "svg": "aab3b2108e4bedc9f62023cd6f07c82c2ed33c5eec9ff3f74589d978c7039de0",
-      "png": "f044ce7a8fdf354bbf0fbe1d76abbf4f702726b01e91af07e250f2eb10c04ddf"
+      "svg": "a2a5b6ca4a41f031b7516132320e44add623c5016572911774c04fa8afb59348",
+      "png": "cdfe490ecce11a0a95b65be10f58c2631ddcd2f45cff2c239729542f9dd3b523"
     },
     "generic/platform": {
       "width": 2400,
-      "svg": "5228adc30cffabacbc92fefea17323dd9c9ca22e908d70f43f0c155b767aa282",
-      "png": "89f561961ec9d3ae741ad201035fe48843dc7ba7ca93eac5aec9d30ee794f414"
+      "svg": "80d28b7f3c5416bcff4f5a15e124814a70c20a0ab64ba194a1545b1c085e08fb",
+      "png": "01d4cbd71e5a8fe4c1aa7a55fa9bc20e36ac3c952a1e147cc62945d73fd0698f"
     },
     "aws/tiny": {
       "width": 2000,
-      "svg": "7215518eba21cbd3f776639e67ce52504b3aa7f616edcb900d8fe4371ea8f589",
-      "png": "73b3827290a3afcdc7e47a7df4453e19a17d44473bb759e1497a99a76b15fa93"
+      "svg": "cd80546f5ed3947f0af694130846b74b3e2151b727ebd12e58d979143a575591",
+      "png": "f1e5c6bb19b4e328cbf63247e1cd8937ec4f3267c4d7274b4c8309b6ccf44743"
     },
     "aws/medium": {
       "width": 2400,
-      "svg": "315a2cb5748ddc016a11329b848a12abfe5b5ec740b3fdbabf1531dca3d79342",
-      "png": "5ab564e5be769943cfe91393d73090050b0cbaf7b825b2e9d9d17cc142cf0de2"
+      "svg": "171329aaa2dd3ecada5baa33a38510c329e062c66cd16373fbf5f0e344ace59e",
+      "png": "c2248bbca02d3f0be4df849e4019fe25c1ec37efadf17b3aa037018c94dbf216"
     },
     "aws/large": {
       "width": 4600,
-      "svg": "5fdf3f14265bb8a73988a177accdd758596266b3cd1a6b531caeb5ce5a501fa6",
-      "png": "6c70daf042882f5454ca1d48a986753b142138886a4dfe74fcc94a9d35ce6e0c"
+      "svg": "518af494da7124afffa28d02e99acce3685a5e0a4e52ad03cce9e1655a9b3ee9",
+      "png": "300a31d4f228313ee10a124efa74b98c12657377d15e222f82ae2720d58de2d8"
     },
     "aws/event-driven": {
       "width": 2400,
-      "svg": "b8c84622b92c6bc2cfe70344f8a34c825cd65e0878c0fc3b5805dac83efac099",
-      "png": "9af786c96fc409371743d1d644dd3d082e0d4e523424321d91aa1c41d9b60b3b"
+      "svg": "25f5b1dff7402d7fae6ed2c809e556d59c86e2c065d79f4a0e8ae62689004065",
+      "png": "66f85c6e7f1978e6e96b3cb3882fe4d2df078331fc8abc888863d9ec54f3dd54"
     }
   },
   "synthetic": {
     "width": 2000,
-    "svg": "bcaea3b0cfe7b9a84b6914b355cc02eef991d4d3a2dbb467f1017108bd3f7190",
-    "png": "62f33101bb408418622def488663cbe053d5dd9e2dfb38a043b5959c8e2591d0"
+    "svg": "105294c0146da48dd36ec4c98f07b33f40fed9ff1eac19f5b1ba686ce8e50c5c",
+    "png": "8a68adcdaa3d58947958088ac72a866e8c7990a62765716a2dd5380ea06de320"
   },
   "aws_store": "fee81b4173ecfc57e9bf2c7fc9ccf1240cf132ddcb82e18b802fe86e743f832b"
 }

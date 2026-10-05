@@ -1,5 +1,5 @@
 name: diagram-skill
-version: 0.1.0
+version: 0.2.0
 description: Agent skill that draws architecture diagrams (PNG and SVG) from a JSON description. Offline, no browser, nothing to install. AWS profile with your own copy of the official icons, plus a generic profile with bundled icons.
 author: masteris777
 license: MIT

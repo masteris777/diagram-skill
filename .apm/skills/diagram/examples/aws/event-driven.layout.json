@@ -1,0 +1,15 @@
+{
+  "grid": {
+    "customer": [0, 1],
+    "apigw":    [1, 1],
+    "orders":   [2, 1],
+    "db":       [2, 2],
+    "queue":    [3, 1],
+    "worker":   [4, 1],
+    "status":   [5, 0],
+    "invoices": [5, 2],
+    "events":   [5, 1],
+    "cw":       [4, 2],
+    "inbox":    [6, 1]
+  }
+}

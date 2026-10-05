@@ -37,16 +37,18 @@ Exit codes: 0 ok, 2 problem in the spec (message lists each one, with "did you m
 
 1. Get the facts: components, which group each belongs to (cloud, region, VPC, zone, subnet, account, on-premises), who talks to whom, the order of the main flow. Ask at most three questions; assume the rest and say what you assumed.
 2. Write `spec.json` next to the document it is for (keep it, so the picture can be regenerated). List nodes and edges in reading order: it drives the layout.
+   If the user says how the picture must fit (a page width, "landscape slide", "narrow, may grow downwards"), put it in `"frame"` with their words as `intent`: `{"intent": "fits a 16 cm column, may grow downwards", "aspect": "any", "maxWidth": 1200}`. Without a frame the target is 4:3, as a hint only.
 3. `--check`, fix everything it reports, render.
-4. **Open the PNG and look at it** with your image-reading tool. (If you cannot view images, say so, rely on `--check` and the node and edge counts the script prints after rendering, and ask the user to review the picture.) Check:
+4. **Read the review lines** the script prints after the PNG line: frame met or missed, then measured faults, worst first (lines through icons, crossings, bends in the main flow, detours, misalignment, big empty areas). The table in `references/spec.md` gives the usual fix for each kind.
+5. **Open the PNG and look at it** with your image-reading tool. (If you cannot view images, say so, rely on `--check` and the review, and ask the user to review the picture.) Check:
    - every component is there, in the right group (NAT and ALB in public subnets, databases in private ones, global services and users outside the Region);
    - the flow reads left to right, step badges run 1..n in order;
    - AZ A above AZ B, internet gateway on the VPC border;
    - no label over an icon or a line, no line through an icon, no group title crossed;
-   - not absurdly wide or tall (about 1:2 up to 3:1 suits a page) and text still readable at the width it will be pasted;
+   - the shape suits where it goes, and the text is readable at that width (the review prints the label size at 16 cm wide; 6 pt or more reads well on a page);
    - solid lines are the main flow, dashed lines are secondary (async, logs, replication).
-5. Fix with the hints below and render again. Expect 1 round for up to about 10 nodes and 2-4 rounds for nested AWS pictures. After four rounds, simplify or split into several pictures of up to about 15 nodes each.
-6. Give the user the path of the PNG (and the SVG if they want a vector) and the spec.
+6. Fix with the hints below and render again. When the automatic layout cannot give what is needed (a node in a particular place, rows that must line up, a more compact arrangement), use a layout file: render once with `--save-layout`, then move nodes by editing their `[column, row]` cells in `spec.layout.json` and render again (see "Layout file" below). A frame the user asked for is a requirement; the default 4:3 is not. To make a picture narrower: fewer columns (stack groups with equal `rank`), a flat picture without groups (it can fold into rows), or split it. Expect 1 round for up to about 10 nodes and 2-4 rounds for nested AWS pictures. After four rounds, simplify or split into several pictures of up to about 15 nodes each, and tell the user which findings are left.
+7. Give the user the path of the PNG (and the SVG if they want a vector) and the spec.
 
 ## Spec
 
@@ -73,10 +75,11 @@ Exit codes: 0 ok, 2 problem in the spec (message lists each one, with "did you m
 - `"rank": N` on groups or nodes = column index inside their parent. Groups of one parent with the same rank are stacked in one column (AZ A above AZ B). Give every child of that parent a rank.
 - `"border": "left"` on a node puts it on its group's border (internet gateway on the VPC edge).
 - `"elk": {"elk.spacing.nodeNode": 40}` passes raw layout options (spec, group, node or edge level). `--layouts 12` tries more layouts.
+- **Layout file** (`spec.layout.json` next to the spec, used automatically): `{"grid": {"id": [column, row]}, "nudge": {"id": [dx, dy]}, "gap": [x, y]}`. Cells give exact rows and columns; nodes without a cell stay automatic. `--save-layout` writes the current layout as cells to start from. Keep a node out of the cells of groups it is not in. A line cannot enter an icon from below (the label is there), so put a target beside or above its source rather than straight under it when a label must stay readable. Details: `references/spec.md`.
 - Recipes and spec fragments: `references/layout.md`. Style rules and check list for AWS pictures: `references/aws-style.md`. Working specs with pictures: `examples/aws/` and `examples/generic/`.
 
 ## Rules
 
-- Never write coordinates or edit the SVG by hand; change the spec and render again.
+- Never write pixel coordinates or edit the SVG by hand; change the spec or the layout file's cells and render again.
 - Do not recolour, crop or redraw AWS icons, and never copy the imported icon store or AWS icon files into a repository or document package. Finished pictures are fine to share.
 - Keep the AWS and Amazon names as AWS writes them; this skill is not affiliated with AWS.

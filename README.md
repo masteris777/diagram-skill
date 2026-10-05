@@ -2,11 +2,12 @@
 
 An agent skill that draws architecture diagrams. Describe the system; the agent writes a small JSON spec, runs one script and gets a clean PNG (and SVG) for your document. Offline, no browser, no Graphviz, nothing to install beyond Node.js.
 
-![Event-driven order processing, drawn from a 33-line spec](.apm/skills/diagram/examples/aws/event-driven.png)
+![Event-driven order processing, drawn from a 36-line spec](.apm/skills/diagram/examples/aws/event-driven.png)
 
 - **Two profiles.** `aws`: AWS architecture style with the official AWS Architecture Icons (you import the pack once, see below). `generic`: any architecture, with 26 bundled icons.
-- **No coordinates.** Layout (ELK), orthogonal line routing, group styles, numbered step badges and labels are automatic. Hints (`rank`, `back`, `border`) steer the few cases that need it.
-- **Agent friendly.** `SKILL.md` teaches the loop: write the spec, `--check` (all problems at once, with "did you mean"), render, look at the picture, refine. Pictures take 0.5 to 1.5 s.
+- **No coordinates, unless you want them.** Layout (ELK), orthogonal line routing, group styles, numbered step badges and labels are automatic. Hints (`rank`, `back`, `border`) steer the few cases that need it, and an optional layout file pins nodes to grid cells for exact rows and columns.
+- **Agent friendly.** `SKILL.md` teaches the loop: write the spec, `--check` (all problems at once, with "did you mean"), render, read the review, look at the picture, refine. Pictures take 0.5 to 3 s.
+- **Self-review.** Every render ends with measured faults (lines through icons, crossings, bends in the main flow, detours, misaligned icons, big empty areas) and a check against the requested frame (`"frame": {"aspect": "4:3", "maxWidth": 1400}`). The layout engine tries several layouts and keeps the one with the fewest faults.
 - **Zero install, deterministic.** The three runtime components are vendored and verified against SHA-256 sums. No network at install or run time; the same spec gives the same bytes on Windows and Linux (Node 18 and 24 tested).
 
 ## Requirements
@@ -52,6 +53,15 @@ Ask your agent for a diagram ("draw the three-tier architecture of our web shop 
     { "from": "api",   "to": "fn",  "label": "invoke",        "step": 2 } ] }
 ```
 
+Positions are automatic. When you want a node in a particular place, add a layout file next to the spec (`spec.layout.json`): render once with `--save-layout`, move cells, render again. Nodes without a cell stay automatic; `nudge` moves one node by a few pixels.
+
+```json
+{ "grid":  { "users": [0, 0], "api": [1, 0], "fn": [1, 1] },
+  "nudge": { "fn": [0, 8] } }
+```
+
+The picture at the top is drawn this way: [event-driven.json](.apm/skills/diagram/examples/aws/event-driven.json) says what exists, [event-driven.layout.json](.apm/skills/diagram/examples/aws/event-driven.layout.json) where it goes.
+
 Reference: [SKILL.md](.apm/skills/diagram/SKILL.md), [spec](.apm/skills/diagram/references/spec.md), [layout recipes](.apm/skills/diagram/references/layout.md), [AWS style](.apm/skills/diagram/references/aws-style.md), [profiles](.apm/skills/diagram/references/profiles.md).
 
 ## The AWS icons (bring your own)
@@ -82,7 +92,8 @@ spec (JSON) -> validation -> ELK layered layout on several seeds, a cost functio
 ## Limits
 
 - Not for sequence diagrams, charts, ER or UML class diagrams.
-- Nested AWS pictures usually need 2 to 4 look-and-fix rounds; the agent has to look at the PNG. Beyond roughly 35 nodes, split into several pictures. `direction: DOWN` makes lines cross node labels; prefer `RIGHT`.
+- Nested AWS pictures usually need 2 to 4 look-and-fix rounds; the agent has to look at the PNG. For exact placement, use a layout file (grid cells).
+- A frame narrower than the natural layout is met by folding the flow into rows, which works for pictures without groups and only a little with nested groups. Beyond roughly 35 nodes, split into several pictures. `direction: DOWN` makes lines cross node labels; prefer `RIGHT`.
 - Text is set in Liberation Sans: Latin, Greek and Cyrillic work; CJK and emoji do not.
 - Tested on Windows 11 and Debian containers (Node 18 and 24, non-root, no network, no system fonts). Not tested: macOS, Windows on ARM, Alpine, behind a TLS-intercepting proxy, with security software that blocks WebAssembly.
 - resvg-wasm is 2.6.2 (2024); rare SVG features are missing.

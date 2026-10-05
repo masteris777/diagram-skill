@@ -14,7 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import ELK from '../vendor/elk.bundled.cjs';
 import { UserError, readPack, iconFromSvg } from './pack.mjs';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const HERE = path.dirname(fileURLToPath(import.meta.url)), SKILL = path.resolve(HERE, '..');
 
 // ======================= 1. look and feel (architecture-diagram house style: light background, 96 dpi, 12 pt labels) =======================
@@ -29,8 +29,8 @@ const MARGIN = 24, PAD = 20, HEAD_ICON = 48, HEAD_PLAIN = 40, LABEL_GAP = 4;
 const ELK_BASE = {
   'elk.algorithm': 'layered', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.edgeRouting': 'ORTHOGONAL',
   'elk.separateConnectedComponents': 'false', 'elk.layered.spacing.nodeNodeBetweenLayers': '32', 'elk.spacing.nodeNode': '22',
-  'elk.spacing.edgeNode': '12', 'elk.spacing.edgeEdge': '8', 'elk.layered.spacing.edgeNodeBetweenLayers': '10',
-  'elk.layered.spacing.edgeEdgeBetweenLayers': '8', 'elk.spacing.labelNode': String(LABEL_GAP),
+  'elk.spacing.edgeNode': '12', 'elk.spacing.edgeEdge': '16', 'elk.layered.spacing.edgeNodeBetweenLayers': '10',
+  'elk.layered.spacing.edgeEdgeBetweenLayers': '16', 'elk.spacing.labelNode': String(LABEL_GAP),
   'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES', 'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
   'elk.layered.edgeLabels.sideSelection': 'ALWAYS_UP', 'elk.portAlignment.default': 'CENTER', 'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT',
 };
@@ -193,10 +193,39 @@ function breakCycles(E) {                                    // edges that close
   for (const e of E) if (e.back) add(e.to, e.from);
   for (const e of E) { if (e.back || e.from === e.to) continue; if (reach(e.to, e.from)) { e.back = true; e.autoBack = true; } add(e.back ? e.to : e.from, e.back ? e.from : e.to); }
 }
+function parseFrame(f, err) {                              // what the picture must fit: target aspect ratio (default 4:3) and optional hard limits in layout px (16 px text = 12 pt at 100 %)
+  const fr = { given: f !== undefined, intent: '', aspect: 4 / 3, aspectText: '4:3', tol: 0.25, maxWidth: null, maxHeight: null };
+  if (f === undefined) return fr;
+  if (!isObj(f)) { err('"frame" must be an object, e.g. {"intent": "fits a portrait page", "aspect": "4:3", "maxWidth": 1400}'); return fr; }
+  checkKeys(f, ['intent', 'aspect', 'tolerance', 'maxWidth', 'maxHeight'], 'frame', err);
+  if (f.intent !== undefined) fr.intent = String(f.intent);
+  if (f.aspect !== undefined) {
+    const m = /^\s*(\d+(?:\.\d+)?)\s*[:/x]\s*(\d+(?:\.\d+)?)\s*$/.exec(String(f.aspect));
+    if (String(f.aspect).toLowerCase() === 'any') { fr.aspect = null; fr.aspectText = 'any'; }
+    else if (typeof f.aspect === 'number' && f.aspect > 0) { fr.aspect = f.aspect; fr.aspectText = `${f.aspect}:1`; }
+    else if (m && +m[1] > 0 && +m[2] > 0) { fr.aspect = m[1] / m[2]; fr.aspectText = `${m[1]}:${m[2]}`; }
+    else err(`frame.aspect ${JSON.stringify(f.aspect)}: use "W:H" such as "4:3", "16:9" or "1:1", a number (width / height), or "any"`);
+  }
+  if (f.tolerance !== undefined) { if (typeof f.tolerance === 'number' && f.tolerance >= 0 && f.tolerance <= 2) fr.tol = f.tolerance; else err('frame.tolerance must be a number from 0 to 2 (0.25 = within 25 % of the aspect)'); }
+  for (const k of ['maxWidth', 'maxHeight']) if (f[k] !== undefined) { if (Number.isFinite(f[k]) && f[k] >= 200) fr[k] = f[k]; else err(`frame.${k} must be a number of layout px, at least 200 (16 px text = 12 pt when the picture is shown at 100 %)`); }
+  return fr;
+}
+function frameCheck(W, H, fr) {                              // -> { cost, ok, text }: how far the picture is from its frame
+  const a = W / H, out = [];
+  let cost = 0, ok = true;
+  if (fr.aspect) {
+    const off = Math.abs(Math.log(a / fr.aspect)) - Math.log(1 + fr.tol);
+    if (off > 0) { cost += off * 500; ok = false; out.push(`aspect ${a.toFixed(2)}:1 is ${a > fr.aspect ? 'wider' : 'taller'} than ${fr.aspectText} (${fr.aspect.toFixed(2)}:1, within ${Math.round(fr.tol * 100)}%)`); }
+  }
+  if (fr.maxWidth && W > fr.maxWidth) { cost += 300 + (W - fr.maxWidth) / 2; ok = false; out.push(`width ${W} px is over maxWidth ${fr.maxWidth}`); }
+  if (fr.maxHeight && H > fr.maxHeight) { cost += 300 + (H - fr.maxHeight) / 2; ok = false; out.push(`height ${H} px is over maxHeight ${fr.maxHeight}`); }
+  return { cost, ok, text: out.join('; ') };
+}
 function buildModel(spec, icons) {
   const errs = [], warns = [], err = (m) => errs.push(m);
   if (!isObj(spec)) throw new UserError('spec must be a JSON object: {"title":"...","direction":"RIGHT","groups":[...],"nodes":[...],"edges":[...]}');
-  checkKeys(spec, ['title', 'profile', 'direction', 'groups', 'nodes', 'edges', 'elk'], 'spec', err);
+  checkKeys(spec, ['title', 'profile', 'direction', 'frame', 'groups', 'nodes', 'edges', 'elk'], 'spec', err);
+  const frame = parseFrame(spec.frame, err);
   const arr = (k) => { const v = spec[k] ?? []; if (!Array.isArray(v)) { err(`"${k}" must be an array`); return []; } return v; };
   const dirs = { right: 'RIGHT', lr: 'RIGHT', left: 'LEFT', rl: 'LEFT', down: 'DOWN', tb: 'DOWN', up: 'UP', bt: 'UP' };
   let direction = dirs[String(spec.direction ?? 'RIGHT').toLowerCase()];
@@ -265,7 +294,7 @@ function buildModel(spec, icons) {
   for (const n of N) if (!E.some((e) => e.from === n.id || e.to === n.id)) warns.push(`node "${n.id}" has no edges`);
   if (errs.length) throw new UserError([`SPEC HAS ${errs.length} ERROR${errs.length > 1 ? 'S' : ''}:`, ...errs.map((m) => `  - ${m}`)]);
   void nIds;
-  return { direction, title: spec.title ? String(spec.title) : '', G, N, E, warns, elk: elkOpts(spec, 'spec') };
+  return { direction, frame, title: spec.title ? String(spec.title) : '', G, N, E, warns, elk: elkOpts(spec, 'spec') };
 }
 
 // ======================= 6. layout: ELK on several seeds -> scene -> own routing for stacked-group edges -> a cost function picks the best =======================
@@ -286,8 +315,8 @@ function stackedEdges(M) {                                   // edges between tw
   }
   return out;
 }
-async function elkRun(M, icons, skip, seed, debugBase) {
-  const rootOpts = { ...ELK_BASE, 'elk.direction': M.direction, 'elk.randomSeed': String(seed), ...M.elk };
+async function elkRun(M, icons, skip, seed, debugBase, { free, ...place } = {}) {   // free: no fixed attachment points (ELK spreads lines over the side)
+  const rootOpts = { ...ELK_BASE, ...place, 'elk.direction': M.direction, 'elk.randomSeed': String(seed), ...M.elk };
   const inherit = Object.fromEntries(Object.entries(rootOpts).filter(([k]) => /spacing|portAlignment|crossingMinimization|nodePlacement|edgeLabels|randomSeed/.test(k)));   // elkjs does not pass root options to nested compound graphs: copy them down
   const mk = new Map();
   for (const g of M.G) {
@@ -295,9 +324,19 @@ async function elkRun(M, icons, skip, seed, debugBase) {
     mk.set(g.id, { id: g.id, children: [], _g: g, _icon: !!hasIcon, layoutOptions: { 'elk.padding': `[top=${head},left=${PAD},bottom=${PAD},right=${PAD}]`,
       'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${Math.ceil(hasIcon ? 52.8 + lw + 16 : lw + 32)},${head + 16})`, ...inherit, ...g.elk } });
   }
+  const ports = !free && (M.direction === 'RIGHT' || M.direction === 'LEFT');   // DOWN/UP: the label sits under the icon, where a port would be
   for (const n of M.N) {
     const lines = nodeLines(n.label), lw = Math.ceil(Math.max(...lines.map((l) => textWidth(l))));
     mk.set(n.id, { id: n.id, width: n.size, height: n.size, _n: n, _lines: lines, labels: [{ text: n.label, width: lw, height: lines.length * LH, layoutOptions: labelOpt }], layoutOptions: { ...labelOpt, ...n.elk } });
+    if (ports) {                                             // one attachment point in the middle of the in-side and one of the out-side: lines leave an icon from its centre line and fan out from there
+      const r = M.direction === 'RIGHT', h = n.size / 2;
+      const back = Math.min(n.size - 2, Math.max(h + 20, Math.round(n.size * 0.8)));   // return lines get their own points below the centre, so they never merge with the main flow
+      mk.get(n.id).ports = [{ id: `${n.id}.in`, x: r ? 0 : n.size, y: h, width: 0, height: 0, layoutOptions: { 'elk.port.side': r ? 'WEST' : 'EAST' } },
+        { id: `${n.id}.out`, x: r ? n.size : 0, y: h, width: 0, height: 0, layoutOptions: { 'elk.port.side': r ? 'EAST' : 'WEST' } },
+        { id: `${n.id}.bin`, x: r ? 0 : n.size, y: back, width: 0, height: 0, layoutOptions: { 'elk.port.side': r ? 'WEST' : 'EAST' } },
+        { id: `${n.id}.bout`, x: r ? n.size : 0, y: back, width: 0, height: 0, layoutOptions: { 'elk.port.side': r ? 'EAST' : 'WEST' } }];
+      Object.assign(mk.get(n.id).layoutOptions, { 'elk.portConstraints': 'FIXED_POS', 'elk.alignment': 'CENTER' });
+    }
   }
   const root = { id: 'root', children: [], edges: [], layoutOptions: { ...rootOpts, 'elk.padding': `[top=${MARGIN},left=${MARGIN},bottom=${MARGIN},right=${MARGIN}]` } };
   for (const o of [...M.G, ...M.N]) {
@@ -308,7 +347,8 @@ async function elkRun(M, icons, skip, seed, debugBase) {
   for (const g of M.G) if (!mk.get(g.id).children.length) Object.assign(mk.get(g.id), { width: 160, height: 90 });
   for (const e of M.E) {
     if (skip.has(e.id)) continue;
-    const el = { id: e.id, sources: [e.back ? e.to : e.from], targets: [e.back ? e.from : e.to], _e: e, layoutOptions: { ...e.elk } }, lb = labelBox(e);
+    const src = e.back ? e.to : e.from, tgt = e.back ? e.from : e.to, port = (id, side) => (ports && mk.get(id)?._n ? `${id}.${e.back ? 'b' : ''}${side}` : id);
+    const el = { id: e.id, sources: [port(src, 'out')], targets: [port(tgt, 'in')], _e: e, layoutOptions: { ...e.elk } }, lb = labelBox(e);
     if (e.label || e.step) el.labels = [{ id: `${e.id}_l`, text: e.label, width: lb.w, height: lb.h, layoutOptions: { 'elk.edgeLabels.placement': 'CENTER' } }];
     root.edges.push(el);
   }
@@ -343,8 +383,8 @@ const sidesOf = (nd) => {                                    // attachment point
   const s = nd.n.size, cx = nd.x + s / 2, cy = nd.y + s / 2, lb = nd.y + s + LABEL_GAP + nd.lines.length * LH;
   return [{ x: nd.x + s, y: cy, d: 0 }, { x: cx, y: lb + 3, d: 1 }, { x: nd.x, y: cy, d: 2 }, { x: cx, y: nd.y, d: 3 }];
 };
-function astar(S, obst, a, b) {
-  const G = 12, pad = 120, TURN = 30;
+function astar(S, obst, a, b, trunk = () => false, pad = 120) {   // trunk(e): lines this one may share a track with (same start or end point); pad: how far the search may stray beyond the two ends
+  const G = 12, TURN = 30;
   const lines = (c1, c2, lo, hi) => { const set = new Set(); for (const c of [c1, c2]) for (let v = c - Math.floor((c - lo) / G) * G; v <= hi; v += G) set.add(r1(v)); return [...set].sort((p, q) => p - q); };
   const xs = lines(a.x, b.x, Math.max(0, Math.min(a.x, b.x) - pad), Math.min(S.W, Math.max(a.x, b.x) + pad));
   const ys = lines(a.y, b.y, Math.max(0, Math.min(a.y, b.y) - pad), Math.min(S.H, Math.max(a.y, b.y) + pad));
@@ -356,7 +396,7 @@ function astar(S, obst, a, b) {
     if ((Math.abs(ys[j] - g.y) < 4 || Math.abs(ys[j] - g.y - g.h) < 4) && xs[i] > g.x - 1 && xs[i] < g.x + g.w + 1) penH[i * ny + j] = 1;
   }
   const onSeg = new Uint8Array(xs.length * ny);               // vertices on an already drawn edge: avoid sharing a track
-  for (const e of S.edges) for (let k = 1; k < e.pts.length; k++) {
+  for (const e of S.edges) if (!trunk(e)) for (let k = 1; k < e.pts.length; k++) {
     const p = e.pts[k - 1], q = e.pts[k];
     for (let i = 0; i < xs.length; i++) for (let j = 0; j < ny; j++) {
       const vert = Math.abs(p.x - q.x) < 1 && Math.abs(xs[i] - p.x) < 10 && ys[j] >= Math.min(p.y, q.y) - 1 && ys[j] <= Math.max(p.y, q.y) + 1, hor = Math.abs(p.y - q.y) < 1 && Math.abs(ys[j] - p.y) < 10 && xs[i] >= Math.min(p.x, q.x) - 1 && xs[i] <= Math.max(p.x, q.x) + 1;
@@ -421,18 +461,49 @@ function routeStacked(S, M, ids) {
   }
   S.edges.sort((p, q) => Number(p.m.id.slice(1)) - Number(q.m.id.slice(1)));
 }
+const routeShape = (pts) => {                                // real bends (straight-through points ignored), length, and the distance between the ends
+  const s = segsOf({ pts }).filter((x) => x.len >= 0.5), p = pts[0], q = pts[pts.length - 1];
+  return { bends: s.filter((x, i) => i && x.hor !== s[i - 1].hor).length, len: s.reduce((t, x) => t + x.len, 0), dist: Math.abs(p.x - q.x) + Math.abs(p.y - q.y), segs: s };
+};
+const crossingsWith = (segs, S, self) => S.edges.filter((o) => o !== self).flatMap((o) => segsOf(o)).reduce((t, b) => t + segs.filter((a) => a.hor !== b.hor && (a.hor
+  ? b.x0 > a.x0 + 1 && b.x0 < a.x1 - 1 && a.y0 > b.y0 + 1 && a.y0 < b.y1 - 1 : a.x0 > b.x0 + 1 && a.x0 < b.x1 - 1 && b.y0 > a.y0 + 1 && b.y0 < a.y1 - 1)).length, 0);
+function reroute(S, M) {                                     // lines ELK sends on a detour (more than two bends, or much longer than needed) get our own A* route, kept only when it is simpler
+  const byId = new Map(S.nodes.map((n) => [n.n.id, n])), out = { RIGHT: 0, DOWN: 1, LEFT: 2, UP: 3 }[M.direction], done = new Set();
+  for (const se of [...S.edges]) {
+    const A = byId.get(se.m.from), B = byId.get(se.m.to);
+    if (!A || !B || A === B || se.m.back || A.n.border || B.n.border) continue;
+    const old = routeShape(se.pts); if (old.bends <= 2 && old.len <= 1.4 * old.dist + 120) continue;
+    const at = S.edges.indexOf(se); S.edges.splice(at, 1);
+    const obst = obstacles(S, A, B), oldScore = old.bends * 60 + old.len + crossingsWith(old.segs, S, se) * 150; let best = null;
+    for (const inSide of [(out + 2) % 4, (out + 1) % 4, (out + 3) % 4].filter((d) => d !== 1)) {   // never into the bottom: the label is there
+      const r = astar(S, obst, sidesOf(A)[out], sidesOf(B)[inSide], (o) => !o.m.back && o.m.line === se.m.line && (o.m.from === se.m.from || o.m.to === se.m.to)); if (!r) continue;
+      const sh = routeShape(r.pts), score = sh.bends * 60 + sh.len + crossingsWith(sh.segs, S, se) * 150;   // a bend costs about 60 px of line, a crossing 150
+      if (sh.bends < old.bends && score < oldScore && (!best || score < best.score)) best = { pts: r.pts, score };
+    }
+    S.edges.splice(at, 0, se);
+    if (best) { se.pts = best.pts; se.label = null; done.add(se.m.id); }
+  }
+  return done;
+}
 function placeLabels(S, ids) {                               // own label placement: next to the longest free segment (used for routed edges and when ELK reports a label far from its edge)
   const avoid = obstacles(S, null, null);
   for (const se of S.edges) if (se.label && !ids.has(se.m.id)) avoid.push([se.label.x, se.label.y, se.label.x + se.label.w, se.label.y + se.label.h]);
+  for (const g of S.groups) avoid.push([g.x - 2, g.y - 2, g.x + g.w + 2, g.y + 2], [g.x - 2, g.y + g.h - 2, g.x + g.w + 2, g.y + g.h + 2], [g.x - 2, g.y, g.x + 2, g.y + g.h], [g.x + g.w - 2, g.y, g.x + g.w + 2, g.y + g.h]);   // group borders
+  const all = S.edges.flatMap((e) => segsOf(e).filter((s) => s.len >= 0.5));
   for (const se of S.edges.filter((x) => ids.has(x.m.id))) {
     const lb = labelBox(se.m); if (!lb.w) continue;
-    const segs = []; for (let i = 1; i < se.pts.length; i++) { const p = se.pts[i - 1], q = se.pts[i]; segs.push({ p, q, len: Math.abs(p.x - q.x) + Math.abs(p.y - q.y), hor: p.y === q.y }); }
-    const cands = []; for (const sg of segs.sort((u, v) => v.len - u.len)) {
-      const mx = (sg.p.x + sg.q.x) / 2, my = (sg.p.y + sg.q.y) / 2;
-      cands.push(...(sg.hor ? [[mx - lb.w / 2, sg.p.y - lb.h - 3], [mx - lb.w / 2, sg.p.y + 3]] : [[sg.p.x + 6, my - lb.h / 2], [sg.p.x - lb.w - 6, my - lb.h / 2]]));
+    const others = all.filter((s) => s.e !== se).map((s) => [s.x0 - 2, s.y0 - 2, s.x1 + 2, s.y1 + 2]);
+    const shared = (s) => all.some((o) => o.e !== se && o.hor === s.hor && (s.hor ? Math.abs(o.y0 - s.y0) < 2 && Math.min(o.x1, s.x1) - Math.max(o.x0, s.x0) > 10 : Math.abs(o.x0 - s.x0) < 2 && Math.min(o.y1, s.y1) - Math.max(o.y0, s.y0) > 10));
+    // a label belongs on its line's own horizontal stretch: rank segments by length, vertical and shared (trunk) ones much lower; try the middle first, then along the segment
+    const segs = segsOf(se).filter((s) => s.len >= 0.5).map((s) => ({ ...s, score: s.len * (s.hor ? 1 : 0.35) * (shared(s) ? 0.25 : 1) })).sort((u, v) => v.score - u.score);
+    const cands = [];
+    for (const sg of segs) for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9]) {
+      const mx = sg.x0 + (sg.x1 - sg.x0) * t, my = sg.y0 + (sg.y1 - sg.y0) * t;
+      cands.push(...(sg.hor ? [[mx - lb.w / 2, sg.y0 - lb.h - 3], [mx - lb.w / 2, sg.y0 + 3]] : [[sg.x0 + 6, my - lb.h / 2], [sg.x0 - lb.w - 6, my - lb.h / 2]]));
     }
-    const ok = (c) => !avoid.some(([x0, y0, x1, y1]) => c[0] < x1 && c[0] + lb.w > x0 && c[1] < y1 && c[1] + lb.h > y0);
-    const c = cands.find(ok) ?? cands[0]; se.label = { x: c[0], y: c[1], w: lb.w, h: lb.h }; avoid.push([c[0], c[1], c[0] + lb.w, c[1] + lb.h]);
+    const free = (c, list) => !list.some(([x0, y0, x1, y1]) => c[0] < x1 && c[0] + lb.w > x0 && c[1] < y1 && c[1] + lb.h > y0);
+    const c = cands.find((c) => free(c, avoid) && free(c, others)) ?? cands.find((c) => free(c, avoid)) ?? cands[0];
+    se.label = { x: c[0], y: c[1], w: lb.w, h: lb.h }; avoid.push([c[0], c[1], c[0] + lb.w, c[1] + lb.h]);
   }
 }
 const labelOnRoute = (e) => {                                // ELK sometimes reports a label relative to a container (0,0): detect labels that are not next to their line
@@ -442,10 +513,10 @@ const labelOnRoute = (e) => {                                // ELK sometimes re
 
 // ----- cost function: lower is better (crossings, bends, length, edges through nodes, label clashes, group order, area, aspect ratio) -----
 function sceneCost(S, M) {
-  let c = (S.W * S.H) / 4000 + Math.max(0, S.W / S.H - 2.4) * 120 + Math.max(0, 1.3 - S.W / S.H) * 120;
+  let c = (S.W * S.H) / 4000 + frameCheck(S.W, S.H + (M.title ? 52 : 0), M.frame).cost;
   const segs = [], nodeRects = S.nodes.map((n) => ({ n, r: [n.x - 2, n.y - 2, n.x + n.n.size + 2, n.y + n.n.size + 2 + LABEL_GAP + n.lines.length * LH] }));
   for (const e of S.edges) {
-    for (let i = 1; i < e.pts.length; i++) { const p = e.pts[i - 1], q = e.pts[i]; segs.push({ e, x0: Math.min(p.x, q.x), x1: Math.max(p.x, q.x), y0: Math.min(p.y, q.y), y1: Math.max(p.y, q.y) }); c += (Math.abs(p.x - q.x) + Math.abs(p.y - q.y)) / 8; }
+    for (let i = 1; i < e.pts.length; i++) { const p = e.pts[i - 1], q = e.pts[i]; segs.push({ e, x0: Math.min(p.x, q.x), x1: Math.max(p.x, q.x), y0: Math.min(p.y, q.y), y1: Math.max(p.y, q.y) }); c += (Math.abs(p.x - q.x) + Math.abs(p.y - q.y)) / 40; }   // length: a light tie-breaker (area and the review carry the weight)
     c += 3 * Math.max(0, e.pts.length - 2);
     for (const { n, r } of nodeRects) if (n.n.id !== e.m.from && n.n.id !== e.m.to) for (const s of segs.filter((z) => z.e === e)) if (s.x0 < r[2] && s.x1 > r[0] && s.y0 < r[3] && s.y1 > r[1]) c += 300;
     if (e.label) for (const { r } of nodeRects) if (e.label.x < r[2] && e.label.x + e.label.w > r[0] && e.label.y < r[3] && e.label.y + e.label.h > r[1]) c += 150;
@@ -464,25 +535,291 @@ function sceneCost(S, M) {
   const vert = M.direction === 'RIGHT' || M.direction === 'LEFT';
   for (const list of sib.values()) for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
     const p = list[i], q = list[j], overlap = vert ? Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x) : Math.min(p.y + p.h, q.y + q.h) - Math.max(p.y, q.y);
-    if (overlap > 10 && (vert ? p.y + p.h / 2 > q.y + q.h / 2 + 5 : p.x + p.w / 2 > q.x + q.w / 2 + 5)) c += p.grp && q.grp ? 400 : 40;
+    if (overlap > 10 && !(p.grp && q.grp) && (vert ? p.y + p.h / 2 > q.y + q.h / 2 + 5 : p.x + p.w / 2 > q.x + q.w / 2 + 5)) c += 40;   // groups: see review()
   }
   return c;
 }
+// ----- review: measured layout faults, so the agent fixes facts instead of guessing from the picture (and the cost function can avoid them) -----
+const iconRect = (n) => [n.x, n.y, n.x + n.n.size, n.y + n.n.size];
+const nodeLabelRect = (n) => { const c = n.x + n.n.size / 2; return [c - n.lw / 2, n.y + n.n.size, c + n.lw / 2, n.y + n.n.size + LABEL_GAP + n.lines.length * LH]; };
+const footRect = (n) => { const a = iconRect(n), b = nodeLabelRect(n); return [Math.min(a[0], b[0]), a[1], Math.max(a[2], b[2]), b[3]]; };
+const hit = (a, b, m = 0) => a[0] < b[2] + m && a[2] > b[0] - m && a[1] < b[3] + m && a[3] > b[1] - m;
+const segsOf = (e) => e.pts.slice(1).map((q, i) => { const p = e.pts[i]; return { e, hor: Math.abs(p.y - q.y) < 0.5, x0: Math.min(p.x, q.x), x1: Math.max(p.x, q.x), y0: Math.min(p.y, q.y), y1: Math.max(p.y, q.y), len: Math.abs(p.x - q.x) + Math.abs(p.y - q.y) }; });
+const segRect = (s) => [s.x0, s.y0, s.x1, s.y1];
+function review(S, M) {
+  const f = [], add = (kind, weight, text) => f.push({ kind, weight, text });
+  const nm = (id) => `"${id}"`, en = (e) => `${e.m.from} -> ${e.m.to}`;
+  const flow = M.direction === 'RIGHT' || M.direction === 'LEFT' ? 'y' : 'x', across = flow === 'y' ? 'x' : 'y';
+  const c = (n, ax) => (ax === 'x' ? n.x : n.y) + n.n.size / 2;
+  const byId = new Map(S.nodes.map((n) => [n.n.id, n]));
+  // 1. connected nodes that are almost, but not exactly, in line (the line gets a small step)
+  const seenPair = new Set();
+  for (const e of S.edges) {
+    const a = byId.get(e.m.from), b = byId.get(e.m.to); if (!a || !b) continue;
+    const d = Math.abs(c(a, flow) - c(b, flow)), key = [a.n.id, b.n.id].sort().join('|');
+    if (d > 0.5 && d < 40 && !seenPair.has(key)) { seenPair.add(key); add('misaligned', 30 + d, `${nm(a.n.id)} and ${nm(b.n.id)} are connected but ${Math.round(d)} px out of line`); }
+  }
+  // 1b. the main flow should run straight: a bend in a plain chain (a -> b, nothing else leaves a or enters b), or in the branch of a fan-out
+  //     that carries the longer continuation (side branches should take the bends); the more nodes follow, the more it matters
+  const fwd = S.edges.filter((e) => !e.m.back && byId.has(e.m.from) && byId.has(e.m.to) && e.m.from !== e.m.to);
+  const outs = (id) => fwd.filter((e) => e.m.from === id), inN = (id) => fwd.filter((e) => e.m.to === id).length;
+  const after = (id) => { const seen = new Set([id]), st = [id]; while (st.length) { const x = st.pop(); for (const e of fwd) if (e.m.from === x && !seen.has(e.m.to)) { seen.add(e.m.to); st.push(e.m.to); } } return seen.size - 1; };
+  for (const e of fwd) {
+    const a = byId.get(e.m.from), b = byId.get(e.m.to), d = Math.abs(c(a, flow) - c(b, flow)), o = outs(a.n.id);
+    if (d < 40 || a.n.border || b.n.border) continue;
+    const n = after(b.n.id), chain = o.length === 1 && inN(b.n.id) === 1, main = o.length > 1 && n > 0 && o.every((x) => x === e || after(x.m.to) < n);
+    if (chain || main) add('bent', 15 + 10 * Math.min(n, 6), chain ? `line ${en(e)} bends: ${nm(b.n.id)} could sit in line with ${nm(a.n.id)}` : `the main line ${en(e)} bends while side branches of ${nm(a.n.id)} could take the bend instead`);
+  }
+  // 2. small steps (jogs) inside a line
+  for (const e of S.edges) segsOf(e).forEach((s, i, all) => {
+    if (i === 0 || i === all.length - 1 || s.len >= 24 || s.len < 0.5) return;
+    if (all[i - 1].hor === all[i + 1].hor && all[i - 1].hor !== s.hor) add('jog', 20, `line ${en(e)} has a ${Math.round(s.len)} px step`);
+  });
+  // 2b. detours: more than two bends, or a path much longer than the distance between its ends
+  for (const e of S.edges) {
+    const real = segsOf(e).filter((s) => s.len >= 0.5), bends = real.filter((s, i) => i && s.hor !== real[i - 1].hor).length, len = real.reduce((t, s) => t + s.len, 0), p = e.pts[0], q = e.pts[e.pts.length - 1], dist = Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+    if (bends > 2 || len > 1.4 * dist + 120) add('detour', 25 + 15 * Math.max(0, bends - 2) + Math.round(Math.max(0, len - dist) / 20), `line ${en(e)} takes a detour (${bends} bends, ${Math.round(len)} px for ${Math.round(dist)} px)`);
+  }
+  // 3. ragged columns (rows for DOWN/UP): nodes stacked across the flow whose centres differ a little
+  const col = [...S.nodes].sort((p, q) => c(p, across) - c(q, across));
+  for (let i = 0; i < col.length;) {                           // one finding per column: consecutive centres closer than 24 px form a column
+    let j = i; while (j + 1 < col.length && c(col[j + 1], across) - c(col[j], across) < 24) j++;
+    const d = c(col[j], across) - c(col[i], across);
+    if (d > 4) add('ragged', 10 + d, `${col.slice(i, j + 1).map((n) => nm(n.n.id)).join(', ')} are stacked but their centres differ by up to ${Math.round(d)} px`);
+    i = j + 1;
+  }
+  // 4. lines through icons or labels, label clashes, crossings, lines running side by side
+  const segs = S.edges.flatMap(segsOf), labels = S.edges.filter((e) => e.label).map((e) => ({ e, r: [e.label.x, e.label.y, e.label.x + e.label.w, e.label.y + e.label.h] }));
+  for (const n of S.nodes) {
+    const through = new Set(segs.filter((s) => s.e.m.from !== n.n.id && s.e.m.to !== n.n.id && (hit(segRect(s), iconRect(n), -1) || hit(segRect(s), nodeLabelRect(n), -1))).map((s) => en(s.e)));
+    for (const t of through) add('through', 300, `line ${t} runs through ${nm(n.n.id)}`);
+    for (const l of labels) if (hit(l.r, iconRect(n), -1) || hit(l.r, nodeLabelRect(n), -1)) add('label', 150, `label of ${en(l.e)} covers ${nm(n.n.id)}`);
+  }
+  for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) if (hit(labels[i].r, labels[j].r, -1)) add('label', 150, `labels of ${en(labels[i].e)} and ${en(labels[j].e)} overlap`);
+  for (const l of labels) for (const s of segs) if (s.e !== l.e && hit(l.r, segRect(s), -1)) { add('label', 40, `label of ${en(l.e)} sits on line ${en(s.e)}`); break; }
+  for (const l of labels) for (const g of S.groups) {
+    const edges = [[g.x, g.y, g.x + g.w, g.y], [g.x, g.y + g.h, g.x + g.w, g.y + g.h], [g.x, g.y, g.x, g.y + g.h], [g.x + g.w, g.y, g.x + g.w, g.y + g.h]];
+    if (edges.some((b) => hit(l.r, b, 2))) { add('label', 40, `label of ${en(l.e)} sits on the border of group ${nm(g.g.id)}`); break; }
+  }
+  const shares = (a, b) => [a.m.from, a.m.to].some((x) => x === b.m.from || x === b.m.to);
+  let crossings = 0;
+  for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+    const a = segs[i], b = segs[j]; if (a.e === b.e) continue;
+    if (a.hor !== b.hor) { const h = a.hor ? a : b, v = a.hor ? b : a; if (v.x0 > h.x0 + 1 && v.x0 < h.x1 - 1 && h.y0 > v.y0 + 1 && h.y0 < v.y1 - 1 && !shares(a.e, b.e)) crossings++; continue; }
+    const gap = a.hor ? Math.abs(a.y0 - b.y0) : Math.abs(a.x0 - b.x0), run = a.hor ? Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) : Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    const trunk = gap < 2 && !!a.e.m.back === !!b.e.m.back && (a.e.m.from === b.e.m.from || a.e.m.to === b.e.m.to);   // lines that fan out from (or into) one point share a trunk on purpose
+    if (run > 20 && gap < 16 && !trunk) add(gap < 2 ? 'overlap' : 'tight', gap < 2 ? 60 : 25, gap < 2 ? `lines ${en(a.e)} and ${en(b.e)} share a ${Math.round(run)} px track` : `lines ${en(a.e)} and ${en(b.e)} run side by side only ${Math.round(gap)} px apart`);
+  }
+  if (crossings) add('crossing', 60 * crossings, `${crossings} line crossing${crossings > 1 ? 's' : ''}`);
+  // 5. empty space: inside groups (box much bigger than what it holds) and over the whole picture
+  const inside = new Map();
+  const grow = (id, r) => { const b = inside.get(id); inside.set(id, b ? [Math.min(b[0], r[0]), Math.min(b[1], r[1]), Math.max(b[2], r[2]), Math.max(b[3], r[3])] : r); };
+  for (const n of S.nodes) if (n.n.parent && !n.n.border) grow(n.n.parent, footRect(n));
+  for (const g of S.groups) if (g.g.parent) grow(g.g.parent, [g.x, g.y, g.x + g.w, g.y + g.h]);
+  for (const g of S.groups) {
+    const b = inside.get(g.g.id); if (!b) continue;
+    const used = (b[2] - b[0] + 2 * PAD) * (b[3] - b[1] + PAD + (g.icon ? HEAD_ICON : HEAD_PLAIN)), spare = 1 - used / (g.w * g.h);
+    if (spare > 0.35 && g.w * g.h > 90000) add('space', Math.round(spare * 200), `group ${nm(g.g.id)} is ${Math.round(spare * 100)}% empty`);
+  }
+  // 5b. groups stacked in one column keep the order of the spec (AZ A above AZ B)
+  const gl = S.groups.filter((g) => M.G.indexOf(g.g) >= 0);
+  for (let i = 0; i < gl.length; i++) for (let j = 0; j < gl.length; j++) {
+    const p = gl[i], q = gl[j]; if (p.g.parent !== q.g.parent || M.G.indexOf(p.g) >= M.G.indexOf(q.g)) continue;
+    const overlap = flow === 'y' ? Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x) : Math.min(p.y + p.h, q.y + q.h) - Math.max(p.y, q.y);
+    if (overlap > 10 && (flow === 'y' ? p.y > q.y + 5 : p.x > q.x + 5)) add('order', 400, `group ${nm(p.g.id)} comes first in the spec but is drawn ${flow === 'y' ? 'below' : 'right of'} ${nm(q.g.id)}`);
+  }
+  // 6. the biggest empty patch (at least 168 px both ways; thin strips are just spacing): a 24 px grid where icons, labels, lines and group borders are "ink"; largest all-empty rectangle (histogram method)
+  const CELL = 24, nx = Math.ceil(S.W / CELL), ny = Math.ceil(S.H / CELL), inkd = new Uint8Array(nx * ny);
+  const mark = (r) => { for (let i = Math.max(0, Math.floor(r[0] / CELL)); i <= Math.min(nx - 1, Math.floor(r[2] / CELL)); i++) for (let j = Math.max(0, Math.floor(r[1] / CELL)); j <= Math.min(ny - 1, Math.floor(r[3] / CELL)); j++) inkd[j * nx + i] = 1; };
+  for (const n of S.nodes) mark(footRect(n));
+  for (const l of labels) mark(l.r);
+  for (const s of segs) mark(segRect(s));
+  for (const g of S.groups) { mark([g.x, g.y, g.x + g.w, g.y + (g.icon ? 40 : 30)]); mark([g.x, g.y, g.x, g.y + g.h]); mark([g.x + g.w, g.y, g.x + g.w, g.y + g.h]); mark([g.x, g.y + g.h, g.x + g.w, g.y + g.h]); }
+  let hole = { a: 0 }; const hgt = new Array(nx).fill(0);
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) hgt[i] = inkd[j * nx + i] ? 0 : hgt[i] + 1;
+    const st = [];
+    for (let i = 0; i <= nx; i++) {
+      const h = i < nx ? hgt[i] : 0; let start = i;
+      while (st.length && st[st.length - 1][1] >= h) { const [s0, h0] = st.pop(), a = h0 * (i - s0); if (a > hole.a && h0 >= 7 && i - s0 >= 7) hole = { a, x: s0, y: j - h0 + 1, w: i - s0, h: h0 }; start = s0; }
+      st.push([start, h]);
+    }
+  }
+  const holeShare = (hole.a * CELL * CELL) / (S.W * S.H);
+  if (holeShare > 0.08) {
+    const hx = (hole.x + hole.w / 2) * CELL / S.W, hy = (hole.y + hole.h / 2) * CELL / S.H, where = `${hy < 0.33 ? 'top' : hy > 0.67 ? 'bottom' : 'middle'} ${hx < 0.33 ? 'left' : hx > 0.67 ? 'right' : 'centre'}`.replace('middle centre', 'centre');
+    add('space', Math.round(holeShare * 1500), `an empty area of ${hole.w * CELL}x${hole.h * CELL} px (${Math.round(holeShare * 100)}% of the picture) at the ${where}`);
+  }
+  // 7. reading starts top-left: the first node of the spec that nothing leads to should not sit low (RIGHT) or far right (DOWN)
+  const entry = M.N.map((n) => byId.get(n.id)).find((n) => n && !inN(n.n.id) && !n.n.parent) ?? M.N.map((n) => byId.get(n.id)).find((n) => n && !inN(n.n.id));
+  if (entry) {
+    const pos = flow === 'y' ? c(entry, 'y') / S.H : c(entry, 'x') / S.W;
+    if (pos > 0.62) add('start', Math.round((pos - 0.4) * 400), `the flow starts at ${nm(entry.n.id)}, which sits ${flow === 'y' ? 'low' : 'far right'} (${Math.round(pos * 100)}% ${flow === 'y' ? 'down' : 'across'}); reading starts top-left`);
+  }
+  const ink = S.nodes.reduce((t, n) => { const r = footRect(n); return t + (r[2] - r[0]) * (r[3] - r[1]); }, 0) / (S.W * S.H);
+  return { faults: f.sort((a, b) => b.weight - a.weight), crossings, ink, hole: holeShare, aspect: S.W / S.H };
+}
+
 async function layoutBest(M, icons, nLayouts, debugBase) {
   const stacked = stackedEdges(M), seeds = [1, 8, 2, 3, 4, 5, 6, 7].slice(0, M.N.length <= 6 ? 1 : nLayouts);   // never seed 0: ELK treats 0 as "pick a random seed", which made pictures differ from run to run
-  let best = null;
-  for (const seed of seeds) {
-    const S = toScene(await elkRun(M, icons, stacked, seed, seed === seeds[0] ? debugBase : null));
+  const bk = (a) => ({ 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', ...(a ? { 'elk.layered.nodePlacement.bk.fixedAlignment': a } : {}) });
+  const places = [{}, bk(), bk('LEFTUP'), bk('LEFTDOWN'), { free: true }];   // node placers differ in which lines they straighten, and free attachment points suit some nested pictures better: try each, the review decides
+  const wrap = (k) => ({ 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.aspectRatio': String((M.frame.aspect ?? 1.33) * k) });   // a long flow folded into rows: the way to a narrow frame (ELK tends to fold a bit too far, hence two targets)
+  const runs = [...seeds.flatMap((seed) => places.map((place, pi) => ({ seed, place, pi }))), ...(M.frame.aspect || M.frame.maxWidth ? seeds.slice(0, 2).flatMap((seed) => [1, 1.5].map((k) => ({ seed, place: wrap(k), pi: `wrap${k}`, optional: true }))) : [])];
+  const cands = [], cost = (S) => sceneCost(S, M) + review(S, M).faults.reduce((t, x) => t + x.weight, 0);
+  for (const { seed, place, pi, optional } of runs) {
+    let laid;
+    try { laid = await elkRun(M, icons, stacked, seed, seed === seeds[0] && pi === 0 ? debugBase : null, place); } catch (e) { if (optional && e instanceof UserError) continue; throw e; }   // ELK cannot wrap every nested graph
+    const S = toScene(laid);
     snapToBorders(S);
     if (stacked.size) routeStacked(S, M, stacked);
     const need = new Set(stacked);
     for (const e of S.edges) if (e.label && !labelOnRoute(e)) { need.add(e.m.id); e.label = null; }
     if (need.size) placeLabels(S, need);
-    const c = sceneCost(S, M);
-    if (process.env.DIAGRAM_VERBOSE) console.error(`seed ${seed}: cost ${c.toFixed(0)} (${S.W}x${S.H})`);
-    if (!best || c < best.c) best = { S, c, seed };
+    const c = cost(S);
+    if (process.env.DIAGRAM_VERBOSE) console.error(`seed ${seed} placer ${pi}: cost ${c.toFixed(0)} (${S.W}x${S.H})`);
+    cands.push({ S, c });
   }
-  return best.S;
+  for (const cd of cands.sort((a, b) => a.c - b.c).slice(0, 3)) {   // our own detour repair is slow (A*): only for the three best layouts
+    const done = reroute(cd.S, M);
+    if (done.size) { placeLabels(cd.S, done); cd.c = cost(cd.S); }
+  }
+  return cands.sort((a, b) => a.c - b.c)[0].S;
+}
+
+// ======================= 6b. grid layout: a layout file pins nodes to cells; rows, columns and group boxes are sized here and every line is routed by the own router =======================
+const GAP = [64, 48];                                        // default free space between columns / rows (lines and their labels run there)
+const layoutPathFor = (specFile) => (/\.json$/i.test(specFile) ? specFile.replace(/\.json$/i, '.layout.json') : `${specFile}.layout.json`);
+function readLayout(file, M) {                               // -> { grid: Map id -> [column, row], nudge: Map id -> [dx, dy], gap, frame, warns }
+  const L = parseJson(file), errs = [], warns = [], err = (m) => errs.push(m);
+  if (!isObj(L)) throw new UserError(`${file}: a layout file is a JSON object {"grid": {"node id": [column, row]}, "nudge": {"node id": [dx, dy]}, "gap": [x, y], "frame": {...}}`);
+  checkKeys(L, ['grid', 'nudge', 'gap', 'frame'], 'layout', err);
+  const ids = M.N.map((n) => n.id), out = { grid: new Map(), nudge: new Map(), gap: GAP, frame: null, warns };
+  const pairs = (k, ok, what) => {
+    if (L[k] === undefined) return [];
+    if (!isObj(L[k])) { err(`"${k}" must be an object {"node id": ${what}}`); return []; }
+    return Object.entries(L[k]).filter(([id, v]) => {
+      if (id.startsWith('_')) return false;
+      if (!ok(v)) { err(`${k} "${id}": must be ${what}, got ${JSON.stringify(v)}`); return false; }
+      if (ids.includes(id)) return true;
+      const s = close(id, ids); warns.push(`layout ${k}: "${id}" is not a node of the spec${s ? ` - renamed to "${s}"?` : ' (removed?)'}; ignored`); return false;
+    });
+  };
+  for (const [id, v] of pairs('grid', (v) => Array.isArray(v) && v.length === 2 && v.every((x) => Number.isInteger(x) && x >= 0 && x < 100), '[column, row], whole numbers from 0')) out.grid.set(id, v);
+  for (const [id, v] of pairs('nudge', (v) => Array.isArray(v) && v.length === 2 && v.every((x) => Number.isFinite(x) && Math.abs(x) <= 300), '[dx, dy] in px, each within 300')) out.nudge.set(id, v);
+  if (L.gap !== undefined) { if (Array.isArray(L.gap) && L.gap.length === 2 && L.gap.every((x) => Number.isFinite(x) && x >= 16 && x <= 600)) out.gap = L.gap; else err(`"gap" must be [x, y] in px, each from 16 to 600 (default [${GAP}])`); }
+  if (L.frame !== undefined) out.frame = parseFrame(L.frame, err);
+  if (errs.length) throw new UserError([`LAYOUT FILE ${file} HAS ${errs.length} ERROR${errs.length > 1 ? 'S' : ''}:`, ...errs.map((m) => `  - ${m}`), ...warns.map((m) => `  (warning: ${m})`)]);
+  return out;
+}
+function gridFromScene(S) {                                  // a finished layout read back as cells: icon centres closer than 24 px share a column (row)
+  const cl = (vals) => { const idx = new Map(); let k = -1, last = -Infinity; for (const v of [...new Set(vals)].sort((a, b) => a - b)) { if (v - last > 24) k++; idx.set(v, k); last = v; } return idx; };
+  const cx = (n) => r1(n.x + n.n.size / 2), cy = (n) => r1(n.y + n.n.size / 2), fx = cl(S.nodes.map(cx)), fy = cl(S.nodes.map(cy));
+  return new Map(S.nodes.map((n) => [n.n.id, [fx.get(cx(n)), fy.get(cy(n))]]));
+}
+function resolveGrid(M, given, auto) {                       // given cells win; the others keep their automatic cell, moved down while it is taken; then check group areas
+  const cells = new Map(), taken = new Map(), warns = [], errs = [];
+  const put = (id, [c, r], mine) => {
+    const want = [c, r]; while (taken.has(`${c},${r}`)) r++;
+    if (mine && r !== want[1]) warns.push(`grid: "${id}" wants [${want}], which "${taken.get(want.join(','))}" already has; drawn at [${c}, ${r}]`);
+    cells.set(id, [c, r]); taken.set(`${c},${r}`, id);
+  };
+  for (const n of M.N) if (given.has(n.id)) put(n.id, given.get(n.id), true);
+  for (const n of M.N) if (!given.has(n.id)) put(n.id, auto?.get(n.id) ?? [0, 0], false);
+  const parent = new Map([...M.G, ...M.N].map((o) => [o.id, o.parent])), anc = (id) => { const a = []; for (let p = parent.get(id); p; p = parent.get(p)) a.push(p); return a; };
+  const span = new Map();                                    // group -> [c0, r0, c1, r1] over its nodes (a node on its own group's border does not stretch that group)
+  for (const n of M.N) for (const g of anc(n.id)) {
+    if (n.border && g === n.parent) continue;
+    const [c, r] = cells.get(n.id), s = span.get(g);
+    span.set(g, s ? [Math.min(s[0], c), Math.min(s[1], r), Math.max(s[2], c), Math.max(s[3], r)] : [c, r, c, r]);
+  }
+  for (const g of M.G) if (!span.has(g.id)) errs.push(`group "${g.id}" has no node in it; a grid layout needs at least one node in each group`);
+  const inside = (s, c, r) => c >= s[0] && c <= s[2] && r >= s[1] && r <= s[3], show = (s) => `columns ${s[0]}-${s[2]}, rows ${s[1]}-${s[3]}`;
+  for (const [g, s] of span) {
+    for (const n of M.N) if (!anc(n.id).includes(g) && inside(s, ...cells.get(n.id))) errs.push(`"${n.id}" at [${cells.get(n.id)}] lies in the area of group "${g}" (${show(s)}) but does not belong to it: move it out, or move the group's nodes`);
+    for (const [h, t] of span) if (g < h && !anc(g).includes(h) && !anc(h).includes(g) && t[0] <= s[2] && s[0] <= t[2] && t[1] <= s[3] && s[1] <= t[3]) errs.push(`groups "${g}" (${show(s)}) and "${h}" (${show(t)}) overlap: neither contains the other, so their cells must not overlap`);
+  }
+  if (errs.length) throw new UserError([`GRID LAYOUT HAS ${errs.length} PROBLEM${errs.length > 1 ? 'S' : ''}:`, ...errs.map((m) => `  - ${m}`)]);
+  return { cells, span, warns };
+}
+function gridScene(M, icons, cells, span, { nudge = new Map(), gap = GAP } = {}) {   // cells -> scene: column widths, row heights and group borders are solved here, then the lines are routed
+  const info = new Map(M.N.map((n) => { const lines = nodeLines(n.label), lw = Math.max(...lines.map((l) => textWidth(l))); return [n.id, { n, lines, lw, w: Math.max(n.size, lw), down: n.size / 2 + LABEL_GAP + lines.length * LH }]; }));
+  const depth = new Map(); for (const g of M.G) { let d = 0; for (let p = g.parent; p; p = M.G.find((x) => x.id === p)?.parent) d++; depth.set(g.id, d); }
+  const head = (g) => (g.t.icon && icons.lib.icons[g.t.icon] ? HEAD_ICON : HEAD_PLAIN), minW = (g) => Math.ceil(g.t.icon && icons.lib.icons[g.t.icon] ? 52.8 + textWidth(g.label) + 16 : textWidth(g.label) + 32);
+  const nc = Math.max(...[...cells.values()].map((c) => c[0])) + 1, nr = Math.max(...[...cells.values()].map((c) => c[1])) + 1;
+  const colW = Array(nc).fill(0), up = Array(nr).fill(0), down = Array(nr).fill(0);
+  for (const [id, [c, r]] of cells) { const i = info.get(id); colW[c] = Math.max(colW[c], i.w); up[r] = Math.max(up[r], i.n.size / 2); down[r] = Math.max(down[r], i.down); }
+  const labelGap = Array(nc + 1).fill(0);                    // an edge between neighbouring columns needs room for its label
+  for (const e of M.E) {
+    const a = cells.get(e.from), b = cells.get(e.to); if (!a || !b || !(e.label || e.step)) continue;
+    if (Math.abs(a[0] - b[0]) === 1 && a[1] === b[1]) labelGap[Math.max(a[0], b[0])] = Math.max(labelGap[Math.max(a[0], b[0])], labelBox(e).w + 36);
+    if (a[0] === b[0]) colW[a[0]] = Math.max(colW[a[0]], 2 * (labelBox(e).w + 14));   // a labelled line inside one column: its label sits beside the line
+  }
+  const G = M.G.filter((g) => span.has(g.id)), byDepth = (sign) => (a, b) => sign * (depth.get(a.id) - depth.get(b.id));
+  const axis = (n, size, lo, hi, opens, gapMin, extraGap) => {   // positions along one axis: per boundary k, closing borders (PAD each), the free gap, opening borders (their header or PAD)
+    const start = [], border = new Map(); let x = MARGIN;
+    for (let k = 0; k <= n; k++) {
+      for (const g of G.filter((g) => hi(g) === k - 1).sort(byDepth(-1))) { x += PAD; border.set(`${g.id}>`, x); }
+      x += k === 0 || k === n ? 0 : Math.max(gapMin, extraGap[k] ?? 0);
+      for (const g of G.filter((g) => lo(g) === k).sort(byDepth(1))) { border.set(`${g.id}<`, x); x += opens(g); }
+      if (k < n) { start[k] = x; x += size[k]; }
+    }
+    return { start, border, end: x + MARGIN };
+  };
+  let X, Y;
+  for (let pass = 0; pass < 6; pass++) {                    // a group whose title is wider than its columns widens its last column
+    X = axis(nc, colW, (g) => span.get(g.id)[0], (g) => span.get(g.id)[2], () => PAD, gap[0], labelGap);
+    let grew = false;
+    for (const g of G) { const w = X.border.get(`${g.id}>`) - X.border.get(`${g.id}<`), need = minW(g) - w; if (need > 0.5) { colW[span.get(g.id)[2]] += need; grew = true; } }
+    if (!grew) break;
+  }
+  Y = axis(nr, up.map((u, r) => u + down[r]), (g) => span.get(g.id)[1], (g) => span.get(g.id)[3], head, gap[1], []);
+  const S = { W: Math.ceil(X.end), H: Math.ceil(Y.end), groups: [], nodes: [], edges: [] };
+  for (const g of [...G].sort(byDepth(1))) {
+    const x0 = X.border.get(`${g.id}<`), y0 = Y.border.get(`${g.id}<`);
+    S.groups.push({ g, icon: head(g) === HEAD_ICON, x: x0, y: y0, w: X.border.get(`${g.id}>`) - x0, h: Y.border.get(`${g.id}>`) - y0 });
+  }
+  for (const [id, [c, r]] of cells) {
+    const i = info.get(id), [dx, dy] = nudge.get(id) ?? [0, 0];
+    S.nodes.push({ n: i.n, lines: i.lines, lw: i.lw, w: i.n.size, h: i.n.size, x: X.start[c] + colW[c] / 2 - i.n.size / 2 + dx, y: Y.start[r] + up[r] - i.n.size / 2 + dy });
+  }
+  S.nodes.sort((a, b) => M.N.indexOf(a.n) - M.N.indexOf(b.n));
+  snapToBorders(S);
+  routeAll(S, M);
+  return S;
+}
+function routeAll(S, M) {                                    // every line with the own router: the end sides that face each other, never into the bottom of an icon (its label is there)
+  const node = new Map(S.nodes.map((n) => [n.n.id, n])), grp = new Map(S.groups.map((g) => [g.g.id, g]));
+  const sidesOfGroup = (g) => [{ x: g.x + g.w, y: g.y + g.h / 2, d: 0 }, { x: g.x + g.w / 2, y: g.y + g.h, d: 1 }, { x: g.x, y: g.y + g.h / 2, d: 2 }, { x: g.x + g.w / 2, y: g.y, d: 3 }];
+  const centre = (o) => (o.n ? [o.x + o.n.size / 2, o.y + o.n.size / 2] : [o.x + o.w / 2, o.y + o.h / 2]);
+  const used = new Map(), spot = (p, line) => {               // an attachment point already used by a line of another style: move 14 px along the side
+    for (const o of [0, 14, -14, 28, -28]) { const q = p.d % 2 ? { ...p, x: p.x + o } : { ...p, y: p.y + o }, k = `${r1(q.x)},${r1(q.y)}`; if (!used.has(k) || used.get(k) === line) return q; }
+    return p;
+  };
+  const facing = (dx, dy) => { const h = dx >= 0 ? 0 : 2, v = dy >= 0 ? 1 : 3; return Math.abs(dx) >= Math.abs(dy) ? [h, v] : [v, h]; };
+  for (const e of M.E) {
+    const A = node.get(e.from) ?? grp.get(e.from), B = node.get(e.to) ?? grp.get(e.to); if (!A || !B || A === B) continue;
+    const [ax, ay] = centre(A), [bx, by] = centre(B), sa = A.n ? sidesOf(A) : sidesOfGroup(A), sb = B.n ? sidesOf(B) : sidesOfGroup(B);
+    const outs = facing(bx - ax, by - ay).filter((d) => A.n || d !== 3), ins = facing(ax - bx, ay - by).filter((d) => (B.n ? d !== 1 : d !== 3));
+    if (!ins.length) ins.push(bx >= ax ? 2 : 0);
+    const obst = obstacles(S, A.n ? A : null, B.n ? B : null), trunk = (o) => o.m.line === e.line && (o.m.from === e.from || o.m.to === e.to);   // only lines of the same style may share a trunk (a dashed line on a solid one would vanish)
+    let best = null;
+    for (const [oi, o] of outs.entries()) for (const [ii, i] of ins.entries()) {   // the sides that face each other come first; another side must be clearly better
+      const r = astar(S, obst, spot(sa[o], e.line), spot(sb[i], e.line), trunk, 400); if (!r) continue;
+      const cost = r.cost + crossingsWith(routeShape(r.pts).segs, S, null) * 150 + (oi + ii) * 80;
+      if (!best || cost < best.cost) best = { pts: r.pts, cost };
+    }
+    if (!best) { console.error(`warning: could not route ${e.from} -> ${e.to}; drawn as a straight line`); best = { pts: [sa[outs[0]], sb[ins[0]]] }; }
+    for (const p of [best.pts[0], best.pts[best.pts.length - 1]]) used.set(`${r1(p.x)},${r1(p.y)}`, e.line);
+    S.edges.push({ m: e, rev: false, pts: best.pts, label: null });
+  }
+  placeLabels(S, new Set(M.E.map((e) => e.id)));
+}
+function writeLayout(file, cells, old, M) {                  // one node per line in spec order, so a change is one line in a diff
+  const ids = M.N.map((n) => n.id).filter((id) => cells.has(id)), w = Math.max(...ids.map((id) => id.length)) + 3;
+  const rows = ids.map((id) => `    ${`"${id}":`.padEnd(w)} [${cells.get(id).join(', ')}]`);
+  const rest = old ? Object.entries(old).filter(([k]) => k !== 'grid').map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v)}`) : [];
+  fs.writeFileSync(file, `{\n  "grid": {\n${rows.join(',\n')}\n  }${rest.length ? `,\n${rest.join(',\n')}` : ''}\n}\n`);
 }
 
 // ======================= 7. SVG emitter =======================
@@ -538,14 +875,14 @@ function toPng(svg, W, { width, scale }) {
 
 // ======================= 9. CLI =======================
 const HELP = `diagram-skill ${VERSION}: JSON spec -> PNG architecture diagram (offline, no browser, nothing to install)
-  node scripts/diagram.mjs spec.json out.png [--svg] [--width 2400 | --scale 2] [--profile aws|generic] [--check] [--debug]
+  node scripts/diagram.mjs spec.json out.png [--svg] [--width 2400 | --scale 2] [--profile aws|generic] [--check] [--debug] [--save-layout] [--layout F | --no-layout]
   node scripts/diagram.mjs --doctor        check Node, the vendored files, fonts, WebAssembly and every profile's icons
   node scripts/diagram.mjs --import-icons <extracted AWS pack folder | Icon-package.zip>      one-time setup of the aws profile
   node scripts/diagram.mjs --find <text> [--profile P]     search icon names     |   --types [--profile P]   list group types
 Profiles: aws (official AWS icons, bring your own pack) | generic (bundled generic icons). Pick one with "profile" in the spec or --profile (default aws).
   --icons-dir <folder>  use any folder of .svg icons (with a viewBox) instead of the profile's icons;  --icons <file>  use a specific imported icon store
 Spec (JSON, ids are your own; groups nest through "parent"; edges may also point at group ids):
-  { "title": "optional", "profile": "aws", "direction": "RIGHT",
+  { "title": "optional", "profile": "aws", "direction": "RIGHT", "frame": {"intent":"fits a slide","aspect":"16:9"},
     "groups": [ {"id":"cloud","label":"AWS Cloud","type":"AWS Cloud"}, {"id":"vpc","label":"VPC 10.0.0.0/16","type":"VPC","parent":"cloud"} ],
     "nodes":  [ {"id":"users","label":"Users","icon":"Users"}, {"id":"alb","label":"ALB","icon":"Application Load Balancer","group":"vpc"} ],
     "edges":  [ {"from":"users","to":"alb","label":"HTTPS","step":1,"style":"solid"} ] }
@@ -555,11 +892,15 @@ Spec (JSON, ids are your own; groups nest through "parent"; edges may also point
     "rank":N on a group or node = column index inside its parent; groups of one parent with the SAME rank are stacked in one column and
     edges between them are routed by the tool (e.g. AZ A above AZ B). "border":"left" puts a node on the border of its group (internet gateway on the VPC edge).
     Raw ELK options: "elk": {"elk.spacing.nodeNode":50} on spec/group/node/edge.
-  --layouts N  ELK runs with different seeds (default 6); a cost function (crossings, bends, group order, area) picks the best.
+  frame (optional): "aspect" "W:H"|number|"any" (default 4:3, a hint only when no frame is given), "maxWidth"/"maxHeight" in layout px, "intent" = the user's words.
+  Layout file (optional, spec.layout.json next to the spec): {"grid": {"id": [column, row]}, "nudge": {"id": [dx, dy]}, "gap": [x, y]} pins nodes to cells;
+    --save-layout writes the current layout as cells, --no-layout ignores the file.
+  After rendering, "review:" lines report the frame and measured faults (lines through icons, crossings, bends, detours, misalignment, empty areas).
+  --layouts N  ELK runs with different seeds (default 6), each with five placement styles; the review and a cost function pick the best.
 Environment: DIAGRAM_SKILL_HOME (per-user data folder, default %LOCALAPPDATA%\\diagram-skill, ~/Library/Application Support/diagram-skill or ~/.local/share/diagram-skill), DIAGRAM_SKILL_ICONS (icon store file).
 Exit codes: 0 ok, 2 spec error, 3 setup/font/icon error, 4 layout failure.`;
 function parseArgs(argv) {
-  const known = { '--svg': 0, '--check': 0, '--debug': 0, '--help': 0, '--types': 0, '--doctor': 0, '--version': 0, '--width': 1, '--scale': 1, '--layouts': 1, '--icons': 1, '--icons-dir': 1, '--profile': 1, '--font-dir': 1, '--import-icons': 1, '--find': 1 };
+  const known = { '--svg': 0, '--check': 0, '--debug': 0, '--help': 0, '--types': 0, '--doctor': 0, '--version': 0, '--width': 1, '--scale': 1, '--layouts': 1, '--icons': 1, '--icons-dir': 1, '--profile': 1, '--font-dir': 1, '--import-icons': 1, '--find': 1, '--layout': 1, '--no-layout': 0, '--save-layout': 0 };
   const a = { pos: [], f: {} };
   for (let i = 0; i < argv.length; i++) {
     const [k, v] = argv[i].startsWith('--') ? argv[i].split(/=(.*)/s) : [null];
@@ -636,8 +977,28 @@ async function main(argv) {
   const icons = loadIcons(readLibrary(P, f).lib, P);
   const M = buildModel(spec, icons);
   for (const w of M.warns) console.error(`warning: ${w}`);
-  if (f.check) { console.log(`spec OK (profile ${P.name}): ${M.G.length} groups, ${M.N.length} nodes, ${M.E.length} edges`); return; }
-  const S = await layoutBest(M, icons, f.layouts ? Number(f.layouts) : 6, f.debug ? outFile.replace(/\.png$/i, '') : null), t1 = performance.now();
+  const layFile = f.layout ? path.resolve(f.layout) : layoutPathFor(specFile);   // the layout file sits next to the spec: spec.json -> spec.layout.json
+  if (f.layout && !f['save-layout'] && !fs.existsSync(layFile)) throw new UserError(`layout file ${layFile} does not exist (write one with --save-layout)`);
+  const lay = !f['no-layout'] && fs.existsSync(layFile) ? readLayout(layFile, M) : null;
+  if (lay) { for (const w of lay.warns) console.error(`warning: ${w}`); if (lay.frame) M.frame = lay.frame; }
+  const full = lay && lay.grid.size === M.N.length;
+  if (f.check) {
+    if (full) for (const w of resolveGrid(M, lay.grid, null).warns) console.error(`warning: ${w}`);
+    console.log(`spec OK (profile ${P.name}): ${M.G.length} groups, ${M.N.length} nodes, ${M.E.length} edges${lay ? `; layout file: ${lay.grid.size} of ${M.N.length} nodes placed` : ''}`); return;
+  }
+  let S, cells = null;
+  if (!full) S = await layoutBest(M, icons, f.layouts ? Number(f.layouts) : 6, f.debug ? outFile.replace(/\.png$/i, '') : null);
+  if (lay && lay.grid.size) {                                 // grid mode: the cells of the layout file, the automatic cells for the rest
+    const G = resolveGrid(M, lay.grid, full ? null : gridFromScene(S));
+    for (const w of G.warns) console.error(`warning: ${w}`);
+    cells = G.cells; S = gridScene(M, icons, cells, G.span, lay);
+  }
+  if (f['save-layout']) {
+    writeLayout(layFile, cells ?? gridFromScene(S), fs.existsSync(layFile) ? parseJson(layFile) : null, M);
+    console.log(`wrote ${layFile}: ${M.N.length} nodes as [column, row]; edit the cells, add "nudge" {"id": [dx, dy]} or "gap" [x, y], and render again`);
+  }
+  if (lay || f['save-layout']) console.log(`layout: ${cells ? `grid from ${path.basename(layFile)} (${lay.grid.size} of ${M.N.length} nodes placed there${full ? '' : ', the others automatic'})` : 'automatic'}`);
+  const t1 = performance.now();
   const { svg, W, H, missing } = emitSvg(M, S, icons);
   if (missing.length) console.error(`warning: icon(s) missing from the icon library (drawn without icon): ${missing.join(', ')}. Re-run --import-icons with a complete pack.`);
   fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
@@ -645,6 +1006,13 @@ async function main(argv) {
   const res = toPng(svg, W, { width: f.width && Number(f.width), scale: f.scale && Number(f.scale) });
   fs.writeFileSync(outFile, res.png);
   console.log(`${outFile}: ${res.w}x${res.h}px (layout ${W}x${H}) ${M.N.length} nodes ${M.G.length} groups ${M.E.length} edges, layout ${(t1 - t0).toFixed(0)} ms, total ${(performance.now() - t0).toFixed(0)} ms`);
+  const R = review(S, M);
+  const F = frameCheck(W, H, M.frame), pt = (12 * 605 / W).toFixed(1);   // 16 cm = 605 px at 96 dpi; labels are 12 pt at 100 %
+  console.log(`review: ${R.faults.length} finding${R.faults.length === 1 ? '' : 's'}; layout ${W}x${H} px, aspect ${(W / H).toFixed(2)}:1, labels ${pt} pt when the picture is 16 cm wide`);
+  if (M.frame.given) console.log(`  frame ${F.ok ? 'met' : 'MISSED'}: ${M.frame.intent ? `"${M.frame.intent}" = ` : ''}aspect ${M.frame.aspectText}${M.frame.maxWidth ? `, maxWidth ${M.frame.maxWidth}` : ''}${M.frame.maxHeight ? `, maxHeight ${M.frame.maxHeight}` : ''}${F.ok ? '' : `; ${F.text}`}`);
+  else if (!F.ok) console.log(`  frame (none given, default target 4:3): ${F.text}; a hint only, unless the user asked for a shape`);
+  for (const x of R.faults.slice(0, 20)) console.log(`  - ${x.kind}: ${x.text}`);
+  if (R.faults.length > 20) console.log(`  ... ${R.faults.length - 20} more`);
 }
 main(process.argv.slice(2)).catch((e) => {
   if (e instanceof UserError) { console.error(e.message); process.exit(e.code); }

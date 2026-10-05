@@ -92,6 +92,33 @@ function compare(label, got, want) {
   check('aws profile without an icon store: exit 3 with the setup steps', r.status === 3 && /ICON STORE NOT FOUND/.test(r.stderr) && /--import-icons/.test(r.stderr), r.stderr);
   r = cli([w('many.json', JSON.stringify({ profile: 'generic', nodes: [{ id: 'a', icon: 'nope' }, { id: 'b', icon: 'nada' }], edges: [{ from: 'a', to: 'zzz' }] })), '--check']);
   check('several problems are reported together', r.status === 2 && /SPEC HAS 3 ERRORS/.test(r.stderr), r.stderr);
+  r = cli([w('bad-frame.json', JSON.stringify({ profile: 'generic', frame: { aspect: 'wide', maxWidth: 50 }, nodes: [{ id: 'a', icon: 'server' }] })), '--check']);
+  check('invalid frame: exit 2 naming frame.aspect and frame.maxWidth', r.status === 2 && /frame\.aspect/.test(r.stderr) && /frame\.maxWidth/.test(r.stderr), r.stderr);
+  const chain = (frame) => JSON.stringify({ profile: 'generic', ...(frame ? { frame } : {}), nodes: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((id) => ({ id, icon: 'server' })), edges: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id, i) => ({ from: id, to: 'bcdefgh'[i] })) });
+  r = cli([w('wide.json', chain({ intent: 'one long row', aspect: 'any' })), path.join(tmp, 'out', 'wide.png')]);
+  const wide = /layout (\d+)x(\d+) px/.exec(r.stdout);
+  check('render prints the review and a met frame', r.status === 0 && wide && /^review: \d+ findings?; layout/m.test(r.stdout) && /frame met: "one long row"/.test(r.stdout), r.stdout + r.stderr);
+  r = cli([w('narrow.json', chain({ aspect: '4:3' })), path.join(tmp, 'out', 'narrow.png')]);
+  const lay = /layout (\d+)x(\d+) px/.exec(r.stdout);
+  check('a flat chain with a 4:3 frame folds into rows (narrower and taller than one row)', r.status === 0 && wide && lay && lay[1] < 0.75 * wide[1] && lay[2] > 1.5 * wide[2] && /frame (met|MISSED)/.test(r.stdout), r.stdout + r.stderr);
+  // layout file: --save-layout writes cells in spec order, a full grid places every node, mistakes are named
+  const gspec = w('grid.json', JSON.stringify({ profile: 'generic', groups: [{ id: 'g', label: 'Backend', type: 'Group' }],
+    nodes: [{ id: 'user', icon: 'user' }, { id: 'api', icon: 'api', group: 'g' }, { id: 'db', icon: 'database', group: 'g' }, { id: 'mail', icon: 'mail' }],
+    edges: [{ from: 'user', to: 'api', label: 'call' }, { from: 'api', to: 'db', label: 'read' }, { from: 'api', to: 'mail' }] }));
+  const gfile = gspec.replace(/\.json$/, '.layout.json');
+  r = cli([gspec, path.join(tmp, 'out', 'grid-auto.png'), '--save-layout']);
+  const saved = fs.existsSync(gfile) ? fs.readFileSync(gfile, 'utf8') : '';
+  check('--save-layout writes spec.layout.json with one [column, row] per node, in spec order', r.status === 0 && /"user": +\[\d+, \d+\],\n +"api": +\[\d+, \d+\],\n +"db": +\[\d+, \d+\],\n +"mail": +\[\d+, \d+\]/.test(saved), r.stdout + r.stderr + saved);
+  fs.writeFileSync(gfile, JSON.stringify({ grid: { user: [0, 0], api: [1, 0], db: [1, 1], mail: [2, 0], apii: [5, 5] }, nudge: { mail: [0, 6] } }));
+  r = cli([gspec, path.join(tmp, 'out', 'grid.png'), '--svg']);
+  const gsvg = fs.existsSync(path.join(tmp, 'out', 'grid.svg')) ? fs.readFileSync(path.join(tmp, 'out', 'grid.svg'), 'utf8') : '';
+  const ys = [...gsvg.matchAll(/<use href="#s\d+" x="([\d.]+)" y="([\d.]+)"/g)].map((m) => +m[2]);
+  check('a full grid places every node: one row shares one centre line, a stale id is reported', r.status === 0 && /4 of 4 nodes placed/.test(r.stdout) && /"apii" is not a node of the spec - renamed to "api"\?/.test(r.stderr) && ys.length === 4 && ys[0] === ys[1] && ys[3] === ys[0] + 6 && ys[2] > ys[1], r.stdout + r.stderr + ys);
+  fs.writeFileSync(gfile, JSON.stringify({ grid: { user: [0, 0], api: [1, 0], db: [1, 2], mail: [1, 1] } }));
+  r = cli([gspec, '--check']);
+  check('a node inside the cells of a group it is not in: exit 2 naming node, cell and group', r.status === 2 && /"mail" at \[1,1\] lies in the area of group "g"/.test(r.stderr), r.stdout + r.stderr);
+  r = cli([gspec, path.join(tmp, 'out', 'grid-off.png'), '--no-layout']);
+  check('--no-layout ignores the layout file', r.status === 0 && !/layout: grid/.test(r.stdout), r.stdout + r.stderr);
   r = cli(['--find', 'data', '--profile', 'generic']);
   check('--find lists matching icon names', r.status === 0 && /database/.test(r.stdout), r.stdout + r.stderr);
 }
