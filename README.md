@@ -25,7 +25,7 @@ An agent skill that draws architecture diagrams. Describe the system; the agent 
 With [APM](https://github.com/microsoft/apm) (Agent Package Manager):
 
 ```
-apm install masteris777/diagram-skill#v0.1.0
+apm install masteris777/diagram-skill#v0.2.0
 ```
 
 APM copies the skill to `.claude/skills/diagram/` (Claude Code) and `.agents/skills/diagram/` (Copilot, Cursor, Gemini and others), whichever targets your project uses. Without APM, copy `.apm/skills/diagram/` to the folder your agent reads skills from, or run the script directly. APM installs with its own installer, Homebrew, WinGet, Scoop or `pip install apm-cli`; see its README.
@@ -60,7 +60,7 @@ Positions are automatic. When you want a node in a particular place, add a layou
   "nudge": { "fn": [0, 8] } }
 ```
 
-The picture at the top is drawn this way: [event-driven.json](.apm/skills/diagram/examples/aws/event-driven.json) says what exists, [event-driven.layout.json](.apm/skills/diagram/examples/aws/event-driven.layout.json) where it goes.
+The picture at the top is drawn this way: [event-driven.json](.apm/skills/diagram/examples/aws/event-driven.json) says what exists, [event-driven.layout.json](.apm/skills/diagram/examples/aws/event-driven.layout.json) where it goes. The medium and large examples have layout files too.
 
 Reference: [SKILL.md](.apm/skills/diagram/SKILL.md), [spec](.apm/skills/diagram/references/spec.md), [layout recipes](.apm/skills/diagram/references/layout.md), [AWS style](.apm/skills/diagram/references/aws-style.md), [profiles](.apm/skills/diagram/references/profiles.md).
 

@@ -11,10 +11,10 @@
     { "id": "priv_prod", "label": "Private subnets", "type": "Private subnet", "parent": "vpc_prod" },
     { "id": "acct_net", "label": "AWS account: Network hub", "type": "AWS account", "parent": "cloud" },
     { "id": "reg_net", "label": "Region eu-west-1", "type": "Region", "parent": "acct_net" },
-    { "id": "acct_data", "label": "AWS account: Data platform", "type": "AWS account", "parent": "cloud" },
-    { "id": "reg_data", "label": "Region eu-west-1", "type": "Region", "parent": "acct_data" },
     { "id": "acct_sec", "label": "AWS account: Security and logging", "type": "AWS account", "parent": "cloud" },
-    { "id": "reg_sec", "label": "Region eu-west-1", "type": "Region", "parent": "acct_sec" }
+    { "id": "reg_sec", "label": "Region eu-west-1", "type": "Region", "parent": "acct_sec" },
+    { "id": "acct_data", "label": "AWS account: Data platform", "type": "AWS account", "parent": "cloud" },
+    { "id": "reg_data", "label": "Region eu-west-1", "type": "Region", "parent": "acct_data" }
   ],
   "nodes": [
     { "id": "clients", "label": "Web and mobile clients", "icon": "Mobile client" },

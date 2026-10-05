@@ -17,13 +17,13 @@
     },
     "aws/medium": {
       "width": 2400,
-      "svg": "171329aaa2dd3ecada5baa33a38510c329e062c66cd16373fbf5f0e344ace59e",
-      "png": "c2248bbca02d3f0be4df849e4019fe25c1ec37efadf17b3aa037018c94dbf216"
+      "svg": "19ee8cadd51cf883a39c7e1799e129332cf3eda1a6258cc0e9fea7deb1324680",
+      "png": "4a355c154b97039db3930c685b71b148dfb9672a5b82b5c592a46c542647ba28"
     },
     "aws/large": {
       "width": 4600,
-      "svg": "518af494da7124afffa28d02e99acce3685a5e0a4e52ad03cce9e1655a9b3ee9",
-      "png": "300a31d4f228313ee10a124efa74b98c12657377d15e222f82ae2720d58de2d8"
+      "svg": "43aa398bd1d5a81f15f4e3cb4f2e1e422b7d090f0b552c754d7b20778a24672c",
+      "png": "1166f6a7be6acb983a2dd4e5c7ed23ff263791ede6b601827ddbca09f38dac99"
     },
     "aws/event-driven": {
       "width": 2400,

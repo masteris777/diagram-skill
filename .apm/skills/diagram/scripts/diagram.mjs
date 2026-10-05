@@ -429,7 +429,7 @@ function obstacles(S, skipA, skipB) {                       // rectangles lines 
     const own = n === skipA || n === skipB, m = own ? 0 : 8, s = n.n.size;
     o.push([n.x - m, n.y - m, n.x + s + m, n.y + s + m], [n.x + s / 2 - n.lw / 2 - (own ? 0 : 4), n.y + s, n.x + s / 2 + n.lw / 2 + (own ? 0 : 4), n.y + s + LABEL_GAP + n.lines.length * LH + (own ? 0 : 4)]);
   }
-  for (const g of S.groups) { const tw = textWidth(g.g.label); o.push(g.icon ? [g.x, g.y, g.x + 52.8 + tw + 10, g.y + 38] : [g.x + g.w / 2 - tw / 2 - 6, g.y, g.x + g.w / 2 + tw / 2 + 6, g.y + 30]); }
+  for (const g of S.groups) { const tw = textWidth(g.g.label); o.push(g.icon ? [g.x, g.y, g.x + 52.8 + tw + 10, g.y + HEAD_ICON - 4] : [g.x + g.w / 2 - tw / 2 - 6, g.y, g.x + g.w / 2 + tw / 2 + 6, g.y + HEAD_PLAIN - 4]); }   // the whole header band: no line squeezes between title and content
   return o;
 }
 function snapToBorders(S) {                                  // node {border:'left'} sits centred on the border of its group; its edge ends move with it
@@ -748,40 +748,67 @@ function gridScene(M, icons, cells, span, { nudge = new Map(), gap = GAP } = {})
   const head = (g) => (g.t.icon && icons.lib.icons[g.t.icon] ? HEAD_ICON : HEAD_PLAIN), minW = (g) => Math.ceil(g.t.icon && icons.lib.icons[g.t.icon] ? 52.8 + textWidth(g.label) + 16 : textWidth(g.label) + 32);
   const nc = Math.max(...[...cells.values()].map((c) => c[0])) + 1, nr = Math.max(...[...cells.values()].map((c) => c[1])) + 1;
   const colW = Array(nc).fill(0), up = Array(nr).fill(0), down = Array(nr).fill(0);
-  for (const [id, [c, r]] of cells) { const i = info.get(id); colW[c] = Math.max(colW[c], i.w); up[r] = Math.max(up[r], i.n.size / 2); down[r] = Math.max(down[r], i.down); }
-  const labelGap = Array(nc + 1).fill(0);                    // an edge between neighbouring columns needs room for its label
+  for (const [id, [c, r]] of cells) {                        // a node on a group's border does not size its own column (left/right) or row (top/bottom): it sits on the border
+    const i = info.get(id), b = i.n.border;
+    if (b !== 'left' && b !== 'right') colW[c] = Math.max(colW[c], i.w);
+    if (b !== 'top' && b !== 'bottom') { up[r] = Math.max(up[r], i.n.size / 2); down[r] = Math.max(down[r], i.down); }
+  }
+  const labelGap = Array(nc + 1).fill(0), rowGap = Array(nr + 1).fill(0);   // room an edge label or a border node needs at a boundary
   for (const e of M.E) {
     const a = cells.get(e.from), b = cells.get(e.to); if (!a || !b || !(e.label || e.step)) continue;
     if (Math.abs(a[0] - b[0]) === 1 && a[1] === b[1]) labelGap[Math.max(a[0], b[0])] = Math.max(labelGap[Math.max(a[0], b[0])], labelBox(e).w + 36);
     if (a[0] === b[0]) colW[a[0]] = Math.max(colW[a[0]], 2 * (labelBox(e).w + 14));   // a labelled line inside one column: its label sits beside the line
   }
-  const G = M.G.filter((g) => span.has(g.id)), byDepth = (sign) => (a, b) => sign * (depth.get(a.id) - depth.get(b.id));
-  const axis = (n, size, lo, hi, opens, gapMin, extraGap) => {   // positions along one axis: per boundary k, closing borders (PAD each), the free gap, opening borders (their header or PAD)
+  const G = M.G.filter((g) => span.has(g.id)), gById = new Map(M.G.map((g) => [g.id, g])), byDepth = (sign) => (a, b) => sign * (depth.get(a.id) - depth.get(b.id));
+  const within = (a, g) => { for (let p = g.parent; p; p = gById.get(p)?.parent) if (p === a.id) return true; return false; };   // a encloses g
+  const onBorder = new Map();                                // group id + side -> room a border node needs inside that side
+  for (const [id, [c, r]] of cells) {
+    const i = info.get(id), b = i.n.border; if (!b || !span.has(i.n.parent)) continue;
+    const s = span.get(i.n.parent), inner = b === 'left' || b === 'right' ? i.w / 2 + 16 : b === 'top' ? i.down + 12 : i.n.size / 2 + 12, outer = b === 'left' || b === 'right' ? i.w / 2 + 16 : b === 'top' ? i.n.size / 2 + 12 : i.down + 12;
+    onBorder.set(`${i.n.parent}${b}`, Math.max(onBorder.get(`${i.n.parent}${b}`) ?? 0, inner));
+    if (b === 'left') labelGap[s[0]] = Math.max(labelGap[s[0]], outer); if (b === 'right') labelGap[s[2] + 1] = Math.max(labelGap[s[2] + 1], outer);
+    if (b === 'top') rowGap[s[1]] = Math.max(rowGap[s[1]], outer); if (b === 'bottom') rowGap[s[3] + 1] = Math.max(rowGap[s[3] + 1], outer);
+    for (const e of M.E) {                                   // a labelled line from the border node into its group: its label needs room inside the border too
+      if (!(e.label || e.step) || (e.from !== id && e.to !== id) || (b !== 'left' && b !== 'right')) continue;
+      const o = cells.get(e.from === id ? e.to : e.from); if (!o || o[1] !== r) continue;
+      onBorder.set(`${i.n.parent}${b}`, Math.max(onBorder.get(`${i.n.parent}${b}`), i.n.size / 2 + labelBox(e).w + 30));
+    }
+  }
+  // positions along one axis. At boundary k: groups closing after the previous column/row, the free gap, groups opening before the next.
+  // Only nested groups stack their borders; side-by-side groups opening (closing) at the same boundary share the space.
+  const axis = (n, size, lo, hi, opens, closes, gapMin, extraGap) => {
     const start = [], border = new Map(); let x = MARGIN;
     for (let k = 0; k <= n; k++) {
-      for (const g of G.filter((g) => hi(g) === k - 1).sort(byDepth(-1))) { x += PAD; border.set(`${g.id}>`, x); }
+      const C = G.filter((g) => hi(g) === k - 1).sort(byDepth(-1)), cpos = new Map();
+      for (const g of C) { cpos.set(g.id, Math.max(0, ...C.filter((d) => within(g, d)).map((d) => cpos.get(d.id))) + closes(g)); border.set(`${g.id}>`, x + cpos.get(g.id)); }
+      x += Math.max(0, ...cpos.values());
       x += k === 0 || k === n ? 0 : Math.max(gapMin, extraGap[k] ?? 0);
-      for (const g of G.filter((g) => lo(g) === k).sort(byDepth(1))) { border.set(`${g.id}<`, x); x += opens(g); }
+      const O = G.filter((g) => lo(g) === k).sort(byDepth(1)), opos = new Map();
+      for (const g of O) { opos.set(g.id, Math.max(0, ...O.filter((a) => within(a, g)).map((a) => opos.get(a.id) + opens(a)))); border.set(`${g.id}<`, x + opos.get(g.id)); }
+      x += Math.max(0, ...O.map((g) => opos.get(g.id) + opens(g)));
       if (k < n) { start[k] = x; x += size[k]; }
     }
     return { start, border, end: x + MARGIN };
   };
+  const side = (g, s, base) => Math.max(base, onBorder.get(`${g.id}${s}`) ?? 0);
   let X, Y;
   for (let pass = 0; pass < 6; pass++) {                    // a group whose title is wider than its columns widens its last column
-    X = axis(nc, colW, (g) => span.get(g.id)[0], (g) => span.get(g.id)[2], () => PAD, gap[0], labelGap);
+    X = axis(nc, colW, (g) => span.get(g.id)[0], (g) => span.get(g.id)[2], (g) => side(g, 'left', PAD), (g) => side(g, 'right', PAD), gap[0], labelGap);
     let grew = false;
     for (const g of G) { const w = X.border.get(`${g.id}>`) - X.border.get(`${g.id}<`), need = minW(g) - w; if (need > 0.5) { colW[span.get(g.id)[2]] += need; grew = true; } }
     if (!grew) break;
   }
-  Y = axis(nr, up.map((u, r) => u + down[r]), (g) => span.get(g.id)[1], (g) => span.get(g.id)[3], head, gap[1], []);
+  Y = axis(nr, up.map((u, r) => u + down[r]), (g) => span.get(g.id)[1], (g) => span.get(g.id)[3], (g) => side(g, 'top', head(g)), (g) => side(g, 'bottom', PAD), gap[1], rowGap);
   const S = { W: Math.ceil(X.end), H: Math.ceil(Y.end), groups: [], nodes: [], edges: [] };
   for (const g of [...G].sort(byDepth(1))) {
     const x0 = X.border.get(`${g.id}<`), y0 = Y.border.get(`${g.id}<`);
     S.groups.push({ g, icon: head(g) === HEAD_ICON, x: x0, y: y0, w: X.border.get(`${g.id}>`) - x0, h: Y.border.get(`${g.id}>`) - y0 });
   }
   for (const [id, [c, r]] of cells) {
-    const i = info.get(id), [dx, dy] = nudge.get(id) ?? [0, 0];
-    S.nodes.push({ n: i.n, lines: i.lines, lw: i.lw, w: i.n.size, h: i.n.size, x: X.start[c] + colW[c] / 2 - i.n.size / 2 + dx, y: Y.start[r] + up[r] - i.n.size / 2 + dy });
+    const i = info.get(id), [dx, dy] = nudge.get(id) ?? [0, 0], b = span.has(i.n.parent) ? i.n.border : null, h = i.n.size / 2;
+    const cx = b === 'left' ? X.border.get(`${i.n.parent}<`) : b === 'right' ? X.border.get(`${i.n.parent}>`) : X.start[c] + colW[c] / 2;
+    const cy = b === 'top' ? Y.border.get(`${i.n.parent}<`) : b === 'bottom' ? Y.border.get(`${i.n.parent}>`) : Y.start[r] + up[r];
+    S.nodes.push({ n: i.n, lines: i.lines, lw: i.lw, w: i.n.size, h: i.n.size, x: cx - h + dx, y: cy - h + dy });
   }
   S.nodes.sort((a, b) => M.N.indexOf(a.n) - M.N.indexOf(b.n));
   snapToBorders(S);
@@ -792,25 +819,27 @@ function routeAll(S, M) {                                    // every line with 
   const node = new Map(S.nodes.map((n) => [n.n.id, n])), grp = new Map(S.groups.map((g) => [g.g.id, g]));
   const sidesOfGroup = (g) => [{ x: g.x + g.w, y: g.y + g.h / 2, d: 0 }, { x: g.x + g.w / 2, y: g.y + g.h, d: 1 }, { x: g.x, y: g.y + g.h / 2, d: 2 }, { x: g.x + g.w / 2, y: g.y, d: 3 }];
   const centre = (o) => (o.n ? [o.x + o.n.size / 2, o.y + o.n.size / 2] : [o.x + o.w / 2, o.y + o.h / 2]);
-  const used = new Map(), spot = (p, line) => {               // an attachment point already used by a line of another style: move 14 px along the side
-    for (const o of [0, 14, -14, 28, -28]) { const q = p.d % 2 ? { ...p, x: p.x + o } : { ...p, y: p.y + o }, k = `${r1(q.x)},${r1(q.y)}`; if (!used.has(k) || used.get(k) === line) return q; }
+  const used = new Map(), spot = (p, e) => {                  // a point may be shared only by a fan (same style, same start or same end); otherwise move 14 px along the side
+    const fits = (k) => (used.get(k) ?? []).every((o) => o.line === e.line && (o.from === e.from || o.to === e.to));
+    for (const o of [0, 14, -14, 28, -28]) { const q = p.d % 2 ? { ...p, x: p.x + o } : { ...p, y: p.y + o }; if (fits(`${r1(q.x)},${r1(q.y)}`)) return q; }
     return p;
   };
   const facing = (dx, dy) => { const h = dx >= 0 ? 0 : 2, v = dy >= 0 ? 1 : 3; return Math.abs(dx) >= Math.abs(dy) ? [h, v] : [v, h]; };
   for (const e of M.E) {
     const A = node.get(e.from) ?? grp.get(e.from), B = node.get(e.to) ?? grp.get(e.to); if (!A || !B || A === B) continue;
     const [ax, ay] = centre(A), [bx, by] = centre(B), sa = A.n ? sidesOf(A) : sidesOfGroup(A), sb = B.n ? sidesOf(B) : sidesOfGroup(B);
-    const outs = facing(bx - ax, by - ay).filter((d) => A.n || d !== 3), ins = facing(ax - bx, ay - by).filter((d) => (B.n ? d !== 1 : d !== 3));
+    const side = (dx, dy) => { const f = facing(dx, dy); return Math.abs(dx) < Math.abs(dy) ? [...f, (f[1] + 2) % 4] : f; };   // above/below each other: also try both sides (a C shape)
+    const outs = side(bx - ax, by - ay).filter((d) => A.n || d !== 3), ins = side(ax - bx, ay - by).filter((d) => (B.n ? d !== 1 : d !== 3));
     if (!ins.length) ins.push(bx >= ax ? 2 : 0);
     const obst = obstacles(S, A.n ? A : null, B.n ? B : null), trunk = (o) => o.m.line === e.line && (o.m.from === e.from || o.m.to === e.to);   // only lines of the same style may share a trunk (a dashed line on a solid one would vanish)
     let best = null;
     for (const [oi, o] of outs.entries()) for (const [ii, i] of ins.entries()) {   // the sides that face each other come first; another side must be clearly better
-      const r = astar(S, obst, spot(sa[o], e.line), spot(sb[i], e.line), trunk, 400); if (!r) continue;
+      const r = astar(S, obst, spot(sa[o], e), spot(sb[i], e), trunk, 400); if (!r) continue;
       const cost = r.cost + crossingsWith(routeShape(r.pts).segs, S, null) * 150 + (oi + ii) * 80;
       if (!best || cost < best.cost) best = { pts: r.pts, cost };
     }
     if (!best) { console.error(`warning: could not route ${e.from} -> ${e.to}; drawn as a straight line`); best = { pts: [sa[outs[0]], sb[ins[0]]] }; }
-    for (const p of [best.pts[0], best.pts[best.pts.length - 1]]) used.set(`${r1(p.x)},${r1(p.y)}`, e.line);
+    for (const p of [best.pts[0], best.pts[best.pts.length - 1]]) { const k = `${r1(p.x)},${r1(p.y)}`; used.set(k, [...(used.get(k) ?? []), e]); }
     S.edges.push({ m: e, rev: false, pts: best.pts, label: null });
   }
   placeLabels(S, new Set(M.E.map((e) => e.id)));
